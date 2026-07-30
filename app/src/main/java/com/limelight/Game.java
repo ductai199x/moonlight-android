@@ -62,11 +62,13 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.preference.PreferenceManager;
 import android.util.Rational;
 import android.view.Display;
 import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -82,6 +84,7 @@ import android.widget.FrameLayout;
 import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageButton;
+import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -354,6 +357,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 @Override
                 public void onClick(View v) {
                     finish();
+                }
+            });
+            findViewById(R.id.quickMenuQualityButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showQualityMenu(v);
                 }
             });
             updateCursorModeButton();
@@ -1672,6 +1681,36 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 R.drawable.ic_mouse : R.drawable.ic_touch_app);
     }
 
+    private void showQualityMenu(View anchor) {
+        final String[] resolutions = { "1280x720", "1920x1080", "2560x1440" };
+
+        PopupMenu popup = new PopupMenu(this, anchor);
+        for (int i = 0; i < resolutions.length; i++) {
+            String label = resolutions[i] + (resolutions[i].equals(
+                    prefConfig.width + "x" + prefConfig.height) ? " ✓" : "");
+            popup.getMenu().add(0, i, i, label);
+        }
+        popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+                String resolution = resolutions[item.getItemId()];
+                String fps = String.valueOf(prefConfig.fps);
+
+                // Save the new resolution with its default bitrate, then restart
+                // the stream to renegotiate with the host (resolution can't be
+                // changed mid-session)
+                PreferenceManager.getDefaultSharedPreferences(Game.this).edit()
+                        .putString("list_resolution", resolution)
+                        .putInt("seekbar_bitrate_kbps",
+                                PreferenceConfiguration.getDefaultBitrate(resolution, fps))
+                        .apply();
+                recreate();
+                return true;
+            }
+        });
+        popup.show();
+    }
+
     private void setupModifierBar() {
         modifierBar = findViewById(R.id.modifierBar);
 
@@ -1963,6 +2002,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private void setPanZoomModeActive(boolean active) {
         LimeLog.info("Pan/zoom navigation mode: " + (active ? "on" : "off"));
         panZoomModeActive = active;
+        panZoomHandler.resetImplicitGesture();
         if (active) {
             quickMenuZoomButton.setColorFilter(UI_ACCENT_COLOR, PorterDuff.Mode.SRC_IN);
         }
@@ -2479,6 +2519,23 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 if (panZoomModeActive) {
                     panZoomHandler.handleTouchEvent(event);
                     return true;
+                }
+
+                // Outside of navigation mode, pinches still zoom: claim gestures
+                // where the fingers move apart or together, while two-finger
+                // scrolls and taps pass through unchanged
+                if (panZoomHandler != null) {
+                    switch (panZoomHandler.filterImplicitGesture(event)) {
+                        case StreamPanZoomHandler.IMPLICIT_CLAIM_STARTED:
+                            for (TouchContext aTouchContext : touchContextMap) {
+                                aTouchContext.cancelTouch();
+                            }
+                            return true;
+                        case StreamPanZoomHandler.IMPLICIT_CONSUMED:
+                            return true;
+                        default:
+                            break;
+                    }
                 }
 
                 // If this is the parent view, we'll offset our coordinates to appear as if they

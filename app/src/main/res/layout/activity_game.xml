@@ -71,7 +71,7 @@
 
     <LinearLayout
         android:id="@+id/quickMenu"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
@@ -82,18 +82,8 @@
         android:visibility="gone">
 
         <ImageButton
-            android:id="@+id/quickMenuCollapseButton"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:padding="10dp"
-            android:focusable="false"
-            android:src="@drawable/ic_chevron_right"
-            android:background="@android:color/transparent"
-            android:contentDescription="@string/quick_menu_close_description" />
-
-        <ImageButton
             android:id="@+id/quickMenuZoomButton"
-            android:layout_width="44dp"
+            android:layout_width="48dp"
             android:layout_height="44dp"
             android:padding="10dp"
             android:focusable="false"
@@ -103,7 +93,7 @@
 
         <ImageButton
             android:id="@+id/quickMenuKeyboardButton"
-            android:layout_width="44dp"
+            android:layout_width="48dp"
             android:layout_height="44dp"
             android:padding="10dp"
             android:focusable="false"
@@ -113,7 +103,7 @@
 
         <ImageButton
             android:id="@+id/quickMenuCursorModeButton"
-            android:layout_width="44dp"
+            android:layout_width="48dp"
             android:layout_height="44dp"
             android:padding="10dp"
             android:focusable="false"
@@ -122,14 +112,34 @@
             android:contentDescription="@string/quick_menu_cursor_mode_description" />
 
         <ImageButton
+            android:id="@+id/quickMenuQualityButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:focusable="false"
+            android:src="@drawable/ic_tune"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quick_menu_quality_description" />
+
+        <ImageButton
             android:id="@+id/quickMenuDisconnectButton"
-            android:layout_width="44dp"
+            android:layout_width="48dp"
             android:layout_height="44dp"
             android:padding="10dp"
             android:focusable="false"
             android:src="@drawable/ic_power"
             android:background="@android:color/transparent"
             android:contentDescription="@string/quick_menu_disconnect_description" />
+
+        <ImageButton
+            android:id="@+id/quickMenuCollapseButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:focusable="false"
+            android:src="@drawable/ic_chevron_right"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quick_menu_close_description" />
     </LinearLayout>
 
     <LinearLayout

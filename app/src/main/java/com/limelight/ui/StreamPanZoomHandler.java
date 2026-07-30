@@ -19,13 +19,29 @@ public class StreamPanZoomHandler {
     private static final float MIN_SCALE = 1.0f;
     private static final float MAX_SCALE = 5.0f;
     private static final float FOLLOW_CURSOR_MARGIN_DP = 48;
+    private static final float IMPLICIT_DECISION_SLOP_DP = 24;
+
+    // Results of filterImplicitGesture()
+    public static final int IMPLICIT_PASS = 0;
+    public static final int IMPLICIT_CONSUMED = 1;
+    public static final int IMPLICIT_CLAIM_STARTED = 2;
+
+    private static final int GESTURE_IDLE = 0;
+    private static final int GESTURE_UNDECIDED = 1;
+    private static final int GESTURE_CLAIMED = 2;
+    private static final int GESTURE_REJECTED = 3;
 
     private final View streamView;
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector panDetector;
     private final float followCursorMargin;
+    private final float implicitDecisionSlop;
 
     private float scaleFactor = 1.0f;
+
+    private int implicitGestureState = GESTURE_IDLE;
+    private float implicitStartSpan, implicitStartFocusX, implicitStartFocusY;
+    private float implicitPrevSpan, implicitPrevFocusX, implicitPrevFocusY;
 
     public StreamPanZoomHandler(Context context, View streamView) {
         this.streamView = streamView;
@@ -33,6 +49,7 @@ public class StreamPanZoomHandler {
 
         scaleDetector = new ScaleGestureDetector(context, new ScaleListener());
         panDetector = new GestureDetector(context, new PanListener());
+        this.implicitDecisionSlop = IMPLICIT_DECISION_SLOP_DP * context.getResources().getDisplayMetrics().density;
 
         streamView.setPivotX(0);
         streamView.setPivotY(0);
@@ -52,6 +69,142 @@ public class StreamPanZoomHandler {
     public void handleTouchEvent(MotionEvent event) {
         scaleDetector.onTouchEvent(event);
         panDetector.onTouchEvent(event);
+    }
+
+    // Watches multi-touch gestures outside of navigation mode and claims those
+    // that look like a pinch, so zooming works without switching modes. Returns
+    // IMPLICIT_CLAIM_STARTED when a pinch is first recognized (the caller
+    // should cancel any in-progress touch handling), IMPLICIT_CONSUMED while a
+    // pinch (or an undecided two-finger movement) is in progress, and
+    // IMPLICIT_PASS for everything else.
+    public int filterImplicitGesture(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                implicitGestureState = GESTURE_IDLE;
+                return IMPLICIT_PASS;
+
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (implicitGestureState == GESTURE_CLAIMED) {
+                    if (event.getPointerCount() == 2) {
+                        primeImplicitPinch(event);
+                    }
+                    return IMPLICIT_CONSUMED;
+                }
+                if (implicitGestureState == GESTURE_IDLE && event.getPointerCount() == 2) {
+                    implicitGestureState = GESTURE_UNDECIDED;
+                    implicitStartSpan = pointerSpan(event);
+                    implicitStartFocusX = pointerFocusX(event);
+                    implicitStartFocusY = pointerFocusY(event);
+                }
+                else if (implicitGestureState == GESTURE_UNDECIDED) {
+                    // A third finger is not a pinch (e.g. the keyboard gesture)
+                    implicitGestureState = GESTURE_REJECTED;
+                }
+                return IMPLICIT_PASS;
+
+            case MotionEvent.ACTION_MOVE:
+                if (implicitGestureState == GESTURE_UNDECIDED) {
+                    if (event.getPointerCount() < 2) {
+                        return IMPLICIT_PASS;
+                    }
+
+                    float spanDelta = Math.abs(pointerSpan(event) - implicitStartSpan);
+                    float focusDelta = (float) Math.hypot(
+                            pointerFocusX(event) - implicitStartFocusX,
+                            pointerFocusY(event) - implicitStartFocusY);
+
+                    if (spanDelta > implicitDecisionSlop && spanDelta > focusDelta) {
+                        implicitGestureState = GESTURE_CLAIMED;
+                        primeImplicitPinch(event);
+                        return IMPLICIT_CLAIM_STARTED;
+                    }
+                    else if (focusDelta > implicitDecisionSlop * 1.5f && focusDelta > spanDelta * 2) {
+                        // Fingers moving together: this is a scroll
+                        implicitGestureState = GESTURE_REJECTED;
+                        return IMPLICIT_PASS;
+                    }
+
+                    // Hold the gesture back until we know what it is, so a
+                    // pinch doesn't cause a scroll before it's recognized
+                    return IMPLICIT_CONSUMED;
+                }
+                if (implicitGestureState == GESTURE_CLAIMED) {
+                    if (event.getPointerCount() >= 2) {
+                        continueImplicitPinch(event);
+                    }
+                    return IMPLICIT_CONSUMED;
+                }
+                return IMPLICIT_PASS;
+
+            case MotionEvent.ACTION_POINTER_UP:
+                if (implicitGestureState == GESTURE_CLAIMED) {
+                    return IMPLICIT_CONSUMED;
+                }
+                if (implicitGestureState == GESTURE_UNDECIDED) {
+                    // Released before moving enough to decide: it was a tap
+                    implicitGestureState = GESTURE_REJECTED;
+                }
+                return IMPLICIT_PASS;
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                boolean wasClaimed = implicitGestureState == GESTURE_CLAIMED;
+                implicitGestureState = GESTURE_IDLE;
+                return wasClaimed ? IMPLICIT_CONSUMED : IMPLICIT_PASS;
+
+            default:
+                return IMPLICIT_PASS;
+        }
+    }
+
+    public void resetImplicitGesture() {
+        implicitGestureState = GESTURE_IDLE;
+    }
+
+    private void primeImplicitPinch(MotionEvent event) {
+        implicitPrevSpan = pointerSpan(event);
+        implicitPrevFocusX = pointerFocusX(event);
+        implicitPrevFocusY = pointerFocusY(event);
+    }
+
+    private void continueImplicitPinch(MotionEvent event) {
+        float span = pointerSpan(event);
+        float focusX = pointerFocusX(event);
+        float focusY = pointerFocusY(event);
+
+        if (implicitPrevSpan > 0) {
+            float newScaleFactor = Math.max(MIN_SCALE,
+                    Math.min(scaleFactor * (span / implicitPrevSpan), MAX_SCALE));
+
+            // Anchor the zoom at the gesture's focal point, then pan with it
+            float x = focusX + (streamView.getX() - focusX) / scaleFactor * newScaleFactor;
+            float y = focusY + (streamView.getY() - focusY) / scaleFactor * newScaleFactor;
+
+            scaleFactor = newScaleFactor;
+
+            streamView.setScaleX(scaleFactor);
+            streamView.setScaleY(scaleFactor);
+            streamView.setX(x + (focusX - implicitPrevFocusX));
+            streamView.setY(y + (focusY - implicitPrevFocusY));
+
+            constrainToBounds();
+        }
+
+        implicitPrevSpan = span;
+        implicitPrevFocusX = focusX;
+        implicitPrevFocusY = focusY;
+    }
+
+    private static float pointerSpan(MotionEvent event) {
+        return (float) Math.hypot(event.getX(1) - event.getX(0), event.getY(1) - event.getY(0));
+    }
+
+    private static float pointerFocusX(MotionEvent event) {
+        return (event.getX(0) + event.getX(1)) / 2;
+    }
+
+    private static float pointerFocusY(MotionEvent event) {
+        return (event.getY(0) + event.getY(1)) / 2;
     }
 
     public float getScaleFactor() {
