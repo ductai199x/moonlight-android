@@ -220,7 +220,9 @@
     <string name="modifier_caps">Caps</string>
     <string name="modifier_win_description">Windows key</string>
     <string name="modifier_settings_description">Open quick menu</string>
-    <string name="modifier_ime_switch_description">Switch keyboard</string>
+    <string name="modifier_pad_toggle_description">Switch between keyboard and function keys</string>
+    <string name="func_lock_description">Lock the host PC</string>
+    <string name="func_rotate_description">Rotate screen</string>
 
     <string name="category_on_screen_controls_settings">On-screen Controls Settings</string>
     <string name="title_checkbox_show_onscreen_controls">Show on-screen controls</string>

@@ -117,6 +117,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private static final int THREE_FINGER_TAP_THRESHOLD = 300;
     private static final int SCROLL_STRIP_SPEED_FACTOR = 3;
     private static final int MODIFIER_BAR_HEIGHT_DP = 52;
+    private static final int FUNCTION_PAD_HEIGHT_DP = 300;
 
     private ControllerHandler controllerHandler;
     private KeyboardTranslator keyboardTranslator;
@@ -172,6 +173,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private View modifierBar;
     private boolean modifierBarShowing = false;
     private int stickyModifiers = 0;
+    private View functionPad;
+    private ImageButton modifierPadToggleButton;
+    private boolean functionPadVisible = false;
+    private boolean lastImeVisible = false;
+    private int lastImeHeight = 0;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -710,6 +716,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 quickMenu.setVisibility(View.GONE);
                 mouseButtonBar.setVisibility(View.GONE);
                 scrollStrip.setVisibility(View.GONE);
+                if (modifierBar != null && functionPadVisible) {
+                    setFunctionPadVisible(false);
+                    updateBottomChrome();
+                }
 
                 // Show the whole stream in the PiP window
                 if (panZoomHandler != null) {
@@ -1690,13 +1700,28 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 quickMenu.setVisibility(View.VISIBLE);
             }
         });
-        findViewById(R.id.modifierImeSwitchButton).setOnClickListener(new View.OnClickListener() {
+        functionPad = findViewById(R.id.functionPad);
+        modifierPadToggleButton = findViewById(R.id.modifierPadToggleButton);
+        modifierPadToggleButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                inputManager.showInputMethodPicker();
+                if (!functionPadVisible) {
+                    // Replace the soft keyboard with the function key pad
+                    setFunctionPadVisible(true);
+                    InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    inputManager.hideSoftInputFromWindow(streamView.getWindowToken(), 0);
+                    updateBottomChrome();
+                }
+                else {
+                    // Bring the soft keyboard back
+                    setFunctionPadVisible(false);
+                    updateBottomChrome();
+                    toggleKeyboard();
+                }
             }
         });
+
+        setupFunctionPadKeys();
 
         // Show the bar above the soft keyboard whenever the keyboard is visible
         final FrameLayout contentView = findViewById(android.R.id.content);
@@ -1708,7 +1733,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             contentView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
                 @Override
                 public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-                    updateModifierBar(insets.isVisible(WindowInsets.Type.ime()),
+                    onImeStateChanged(insets.isVisible(WindowInsets.Type.ime()),
                             insets.getInsets(WindowInsets.Type.ime()).bottom);
                     return insets;
                 }
@@ -1723,16 +1748,36 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                     int rootHeight = contentView.getRootView().getHeight();
                     int coveredHeight = rootHeight - visibleFrame.bottom;
-                    updateModifierBar(coveredHeight > rootHeight * 0.15, coveredHeight);
+                    onImeStateChanged(coveredHeight > rootHeight * 0.15, coveredHeight);
                 }
             });
         }
     }
 
-    private void updateModifierBar(boolean keyboardVisible, int keyboardHeight) {
-        if (keyboardVisible != modifierBarShowing) {
-            modifierBarShowing = keyboardVisible;
-            if (keyboardVisible) {
+    private void onImeStateChanged(boolean imeVisible, int imeHeight) {
+        lastImeVisible = imeVisible;
+        lastImeHeight = Math.max(0, imeHeight);
+
+        // The soft keyboard replaces the function pad if it comes back
+        if (imeVisible && functionPadVisible) {
+            setFunctionPadVisible(false);
+        }
+
+        updateBottomChrome();
+    }
+
+    private void setFunctionPadVisible(boolean visible) {
+        functionPadVisible = visible;
+        modifierPadToggleButton.setBackgroundResource(visible ?
+                R.drawable.func_toggle_active_bg : android.R.color.transparent);
+    }
+
+    private void updateBottomChrome() {
+        boolean barVisible = lastImeVisible || functionPadVisible;
+
+        if (barVisible != modifierBarShowing) {
+            modifierBarShowing = barVisible;
+            if (barVisible) {
                 modifierBar.setVisibility(View.VISIBLE);
             }
             else {
@@ -1742,21 +1787,95 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
         // Shrink the usable viewport so the stream and the floating controls
-        // stay clear of the keyboard and the modifier bar, and restore it when
-        // the keyboard goes away. The StreamView re-letterboxes into the
-        // reduced space and any zoom transform is re-clamped by its layout
+        // stay clear of the keyboard (or function pad) and the modifier bar,
+        // and restore it when they go away. The StreamView re-letterboxes into
+        // the reduced space and any zoom transform is re-clamped by its layout
         // change listener. The window itself is not resized or panned for the
         // keyboard (adjustNothing).
-        int barHeight = (int) (MODIFIER_BAR_HEIGHT_DP * getResources().getDisplayMetrics().density);
+        float density = getResources().getDisplayMetrics().density;
+        int barHeight = (int) (MODIFIER_BAR_HEIGHT_DP * density);
+        int padHeight = (int) (FUNCTION_PAD_HEIGHT_DP * density);
+        int occupiedBelowBar = lastImeVisible ? lastImeHeight : (functionPadVisible ? padHeight : 0);
+        int bottomInset = barVisible ? occupiedBelowBar + barHeight : 0;
+
         View contentView = findViewById(android.R.id.content);
-        int bottomInset = keyboardVisible ? Math.max(0, keyboardHeight) + barHeight : 0;
         if (contentView.getPaddingBottom() != bottomInset) {
             contentView.setPadding(0, 0, 0, bottomInset);
         }
 
-        // The bar lays out above the padded area, so shift it down into the
-        // slice reserved for it, directly on top of the keyboard
-        modifierBar.setTranslationY(keyboardVisible ? barHeight : 0);
+        // The bar and pad lay out above the padded area, so shift them down
+        // into the space reserved for them
+        modifierBar.setTranslationY(barVisible ? barHeight : 0);
+        functionPad.setVisibility(functionPadVisible ? View.VISIBLE : View.GONE);
+        functionPad.setTranslationY(functionPadVisible ? bottomInset : 0);
+    }
+
+    private void sendFunctionKeys(int[] androidKeyCodes) {
+        short[] translated = new short[androidKeyCodes.length];
+        for (int i = 0; i < androidKeyCodes.length; i++) {
+            translated[i] = keyboardTranslator.translate(androidKeyCodes[i], -1);
+        }
+        for (short keyMap : translated) {
+            conn.sendKeyboardInput(keyMap, KeyboardPacket.KEY_DOWN, getModifierState(), (byte) 0);
+        }
+        for (int i = translated.length - 1; i >= 0; i--) {
+            conn.sendKeyboardInput(translated[i], KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+        }
+    }
+
+    private void wireFunctionKey(int viewId, final int... androidKeyCodes) {
+        findViewById(viewId).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                sendFunctionKeys(androidKeyCodes);
+            }
+        });
+    }
+
+    private void setupFunctionPadKeys() {
+        final int[] fKeyIds = new int[] {
+                R.id.funcF1, R.id.funcF2, R.id.funcF3, R.id.funcF4,
+                R.id.funcF5, R.id.funcF6, R.id.funcF7, R.id.funcF8,
+                R.id.funcF9, R.id.funcF10, R.id.funcF11, R.id.funcF12
+        };
+        for (int i = 0; i < fKeyIds.length; i++) {
+            wireFunctionKey(fKeyIds[i], KeyEvent.KEYCODE_F1 + i);
+        }
+
+        wireFunctionKey(R.id.funcEsc, KeyEvent.KEYCODE_ESCAPE);
+        wireFunctionKey(R.id.funcPrScr, KeyEvent.KEYCODE_SYSRQ);
+        wireFunctionKey(R.id.funcHome, KeyEvent.KEYCODE_MOVE_HOME);
+        wireFunctionKey(R.id.funcPgUp, KeyEvent.KEYCODE_PAGE_UP);
+        wireFunctionKey(R.id.funcTab, KeyEvent.KEYCODE_TAB);
+        wireFunctionKey(R.id.funcDel, KeyEvent.KEYCODE_FORWARD_DEL);
+        wireFunctionKey(R.id.funcEnd, KeyEvent.KEYCODE_MOVE_END);
+        wireFunctionKey(R.id.funcPgDn, KeyEvent.KEYCODE_PAGE_DOWN);
+        wireFunctionKey(R.id.funcIns, KeyEvent.KEYCODE_INSERT);
+
+        wireFunctionKey(R.id.funcCtrlZ, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_Z);
+        wireFunctionKey(R.id.funcWinD, KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_D);
+        wireFunctionKey(R.id.funcLock, KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_L);
+        wireFunctionKey(R.id.funcCtrlC, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_C);
+        wireFunctionKey(R.id.funcCtrlX, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_X);
+        wireFunctionKey(R.id.funcCtrlV, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_V);
+        wireFunctionKey(R.id.funcCtrlA, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_A);
+
+        wireFunctionKey(R.id.funcUp, KeyEvent.KEYCODE_DPAD_UP);
+        wireFunctionKey(R.id.funcDown, KeyEvent.KEYCODE_DPAD_DOWN);
+        wireFunctionKey(R.id.funcLeft, KeyEvent.KEYCODE_DPAD_LEFT);
+        wireFunctionKey(R.id.funcRight, KeyEvent.KEYCODE_DPAD_RIGHT);
+
+        findViewById(R.id.funcRotate).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+                }
+                else {
+                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE);
+                }
+            }
+        });
     }
 
     private void setupStickyModifierButton(final View button, final byte modifierFlag, final int androidKeyCode) {
