@@ -204,6 +204,13 @@
     <string name="title_checkbox_enable_pan_zoom">Enable zoom and pan</string>
     <string name="summary_checkbox_enable_pan_zoom">Show a button while streaming that toggles navigation mode. In navigation mode, pinch to zoom and drag to pan the video without sending input to the host. Useful for remote desktop usage on small screens.</string>
     <string name="pan_zoom_toggle_description">Toggle zoom and pan navigation mode</string>
+    <string name="quick_menu_open_description">Open quick menu</string>
+    <string name="quick_menu_close_description">Close quick menu</string>
+    <string name="quick_menu_keyboard_description">Toggle on-screen keyboard</string>
+    <string name="quick_menu_cursor_mode_description">Toggle touchscreen cursor mode</string>
+    <string name="quick_menu_disconnect_description">Disconnect</string>
+    <string name="cursor_mode_trackpad">Touchscreen is a trackpad</string>
+    <string name="cursor_mode_direct">Touchscreen controls the cursor directly</string>
 
     <string name="category_on_screen_controls_settings">On-screen Controls Settings</string>
     <string name="title_checkbox_show_onscreen_controls">Show on-screen controls</string>

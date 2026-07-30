@@ -155,6 +155,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private boolean panZoomModeActive = false;
     private float relativeCursorX, relativeCursorY;
     private boolean relativeCursorInitialized = false;
+    private ImageButton quickMenuHandle;
+    private View quickMenu;
+    private ImageButton quickMenuCursorModeButton;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -282,6 +285,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         performanceOverlayView = findViewById(R.id.performanceOverlay);
 
         panZoomToggleButton = findViewById(R.id.panZoomToggleButton);
+        quickMenuHandle = findViewById(R.id.quickMenuHandle);
+        quickMenu = findViewById(R.id.quickMenu);
+        quickMenuCursorModeButton = findViewById(R.id.quickMenuCursorModeButton);
         if (prefConfig.enablePanZoom) {
             panZoomHandler = new StreamPanZoomHandler(this, streamView);
             panZoomToggleButton.setVisibility(View.VISIBLE);
@@ -292,6 +298,41 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     setPanZoomModeActive(!panZoomModeActive);
                 }
             });
+
+            quickMenuHandle.setVisibility(View.VISIBLE);
+            quickMenuHandle.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    quickMenuHandle.setVisibility(View.GONE);
+                    quickMenu.setVisibility(View.VISIBLE);
+                }
+            });
+            findViewById(R.id.quickMenuCollapseButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    quickMenu.setVisibility(View.GONE);
+                    quickMenuHandle.setVisibility(View.VISIBLE);
+                }
+            });
+            findViewById(R.id.quickMenuKeyboardButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toggleKeyboard();
+                }
+            });
+            quickMenuCursorModeButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toggleTouchscreenTrackpad();
+                }
+            });
+            findViewById(R.id.quickMenuDisconnectButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    finish();
+                }
+            });
+            updateCursorModeButton();
         }
 
         inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
@@ -515,16 +556,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         inputManager.registerInputDeviceListener(keyboardTranslator, null);
 
         // Initialize touch contexts
-        for (int i = 0; i < touchContextMap.length; i++) {
-            if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView);
-            }
-            else {
-                touchContextMap[i] = new RelativeTouchContext(conn, i,
-                        REFERENCE_HORIZ_RES, REFERENCE_VERT_RES,
-                        streamView, prefConfig, this);
-            }
-        }
+        recreateTouchContexts();
 
         if (prefConfig.onscreenController) {
             // create virtual onscreen controller
@@ -625,6 +657,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 performanceOverlayView.setVisibility(View.GONE);
                 notificationOverlayView.setVisibility(View.GONE);
                 panZoomToggleButton.setVisibility(View.GONE);
+                quickMenuHandle.setVisibility(View.GONE);
+                quickMenu.setVisibility(View.GONE);
 
                 // Show the whole stream in the PiP window
                 if (panZoomHandler != null) {
@@ -652,6 +686,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 if (prefConfig.enablePanZoom) {
                     panZoomToggleButton.setVisibility(View.VISIBLE);
+                    quickMenuHandle.setVisibility(View.VISIBLE);
                 }
 
                 notificationOverlayView.setVisibility(requestedNotificationOverlayVisibility);
@@ -1520,6 +1555,36 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         LimeLog.info("Toggling keyboard overlay");
         InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         inputManager.toggleSoftInput(0, 0);
+    }
+
+    private void recreateTouchContexts() {
+        for (int i = 0; i < touchContextMap.length; i++) {
+            if (!prefConfig.touchscreenTrackpad) {
+                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView);
+            }
+            else {
+                touchContextMap[i] = new RelativeTouchContext(conn, i,
+                        REFERENCE_HORIZ_RES, REFERENCE_VERT_RES,
+                        streamView, prefConfig, this);
+            }
+        }
+    }
+
+    private void toggleTouchscreenTrackpad() {
+        // This only changes the in-memory config, so the toggle lasts until
+        // the end of the session and doesn't modify the saved preference
+        prefConfig.touchscreenTrackpad = !prefConfig.touchscreenTrackpad;
+        recreateTouchContexts();
+        updateCursorModeButton();
+
+        Toast.makeText(this, prefConfig.touchscreenTrackpad ?
+                getResources().getString(R.string.cursor_mode_trackpad) :
+                getResources().getString(R.string.cursor_mode_direct), Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateCursorModeButton() {
+        quickMenuCursorModeButton.setImageResource(prefConfig.touchscreenTrackpad ?
+                R.drawable.ic_mouse : R.drawable.ic_touch_app);
     }
 
     @Override
