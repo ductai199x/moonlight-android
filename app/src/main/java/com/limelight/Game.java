@@ -1786,6 +1786,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     private void showQualityMenu(View anchor) {
         final String[] resolutions = { "1280x720", "1920x1080", "2560x1440" };
+        final int[] fpsOptions = { 30, 60 };
+        final int fpsIdBase = 100;
 
         PopupMenu popup = new PopupMenu(this, anchor);
         for (int i = 0; i < resolutions.length; i++) {
@@ -1793,17 +1795,28 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     prefConfig.width + "x" + prefConfig.height) ? " ✓" : "");
             popup.getMenu().add(0, i, i, label);
         }
+        for (int i = 0; i < fpsOptions.length; i++) {
+            String label = fpsOptions[i] + " FPS" + (fpsOptions[i] == prefConfig.fps ? " ✓" : "");
+            popup.getMenu().add(0, fpsIdBase + i, resolutions.length + i, label);
+        }
         popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
-                String resolution = resolutions[item.getItemId()];
+                String resolution = prefConfig.width + "x" + prefConfig.height;
                 String fps = String.valueOf(prefConfig.fps);
+                if (item.getItemId() >= fpsIdBase) {
+                    fps = String.valueOf(fpsOptions[item.getItemId() - fpsIdBase]);
+                }
+                else {
+                    resolution = resolutions[item.getItemId()];
+                }
 
-                // Save the new resolution with its default bitrate, then restart
-                // the stream to renegotiate with the host (resolution can't be
-                // changed mid-session)
+                // Save the new quality with its default bitrate, then restart
+                // the stream to renegotiate with the host (neither resolution
+                // nor frame rate can be changed mid-session)
                 PreferenceManager.getDefaultSharedPreferences(Game.this).edit()
                         .putString("list_resolution", resolution)
+                        .putString("list_fps", fps)
                         .putInt("seekbar_bitrate_kbps",
                                 PreferenceConfiguration.getDefaultBitrate(resolution, fps))
                         .apply();
