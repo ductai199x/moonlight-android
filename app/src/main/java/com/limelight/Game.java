@@ -314,6 +314,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         if (prefConfig.enablePanZoom) {
             panZoomHandler = new StreamPanZoomHandler(this, streamView);
 
+            // The cursor-following viewport needs to know exactly where the
+            // cursor is, which only the client-authoritative absolute mouse
+            // mode provides. Raw relative motion is rescaled by the host's
+            // desktop resolution and pointer acceleration, which the client
+            // can't predict. In-memory only; the saved preference is untouched.
+            if (!prefConfig.absoluteMouseMode) {
+                LimeLog.info("Desktop mode: using remote desktop mouse mode for trackpad input");
+                prefConfig.absoluteMouseMode = true;
+            }
+
             quickMenuHandle.setVisibility(View.VISIBLE);
             findViewById(R.id.quickMenuHandleChevron).setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -1983,10 +1993,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     public void onRelativeCursorMoved(float deltaX, float deltaY) {
         if (!relativeCursorInitialized) {
-            // Assume the cursor starts centered; the estimate re-syncs whenever
-            // the cursor is pushed against an edge of the desktop
+            // Move the host cursor to a known position once, so the tracked
+            // position is exact from the start
             relativeCursorX = streamView.getWidth() / 2.f;
             relativeCursorY = streamView.getHeight() / 2.f;
+            conn.sendMousePosition((short) relativeCursorX, (short) relativeCursorY,
+                    (short) streamView.getWidth(), (short) streamView.getHeight());
             relativeCursorInitialized = true;
         }
 
