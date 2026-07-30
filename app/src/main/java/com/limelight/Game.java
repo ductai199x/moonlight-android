@@ -1820,11 +1820,22 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         .putInt("seekbar_bitrate_kbps",
                                 PreferenceConfiguration.getDefaultBitrate(resolution, fps))
                         .apply();
-                recreate();
+                restartStream();
                 return true;
             }
         });
         popup.show();
+    }
+
+    private void restartStream() {
+        // recreate() can't be used here: onStop() unconditionally calls
+        // finish(), which would tear down the recreated activity and drop the
+        // user back to the app list. Finish first, then relaunch with the same
+        // intent so the session resumes at the new settings.
+        Intent restart = new Intent(getIntent());
+        finish();
+        startActivity(restart);
+        overridePendingTransition(0, 0);
     }
 
     private void setupModifierBar() {
