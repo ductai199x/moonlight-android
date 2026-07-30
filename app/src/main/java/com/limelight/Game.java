@@ -174,6 +174,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private View scrollStrip;
     private float lastScrollStripY;
     private View modifierBar;
+    private boolean statsOverlayVisible = false;
     private boolean modifierBarShowing = false;
     private int stickyModifiers = 0;
     private View functionPad;
@@ -311,6 +312,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         quickMenu = findViewById(R.id.quickMenu);
         quickMenuZoomButton = findViewById(R.id.quickMenuZoomButton);
         quickMenuCursorModeButton = findViewById(R.id.quickMenuCursorModeButton);
+        statsOverlayVisible = prefConfig.enablePerfOverlay;
         if (prefConfig.enablePanZoom) {
             panZoomHandler = new StreamPanZoomHandler(this, streamView);
 
@@ -323,6 +325,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 LimeLog.info("Desktop mode: using remote desktop mouse mode for trackpad input");
                 prefConfig.absoluteMouseMode = true;
             }
+
+            // Always compute stats in desktop mode so the quick menu can toggle
+            // the overlay at runtime, but start with it hidden
+            prefConfig.enablePerfOverlay = true;
+            statsOverlayVisible = false;
 
             quickMenuHandle.setVisibility(View.VISIBLE);
             findViewById(R.id.quickMenuHandleChevron).setOnClickListener(new View.OnClickListener() {
@@ -375,6 +382,28 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     showQualityMenu(v);
                 }
             });
+            findViewById(R.id.quickMenuScrollDirButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    prefConfig.invertScrollDirection = !prefConfig.invertScrollDirection;
+                    Toast.makeText(Game.this, prefConfig.invertScrollDirection ?
+                            getResources().getString(R.string.scroll_dir_inverted) :
+                            getResources().getString(R.string.scroll_dir_natural), Toast.LENGTH_SHORT).show();
+                }
+            });
+            findViewById(R.id.quickMenuStatsButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    statsOverlayVisible = !statsOverlayVisible;
+                    performanceOverlayView.setVisibility(statsOverlayVisible ? View.VISIBLE : View.GONE);
+                    if (statsOverlayVisible) {
+                        ((ImageButton) v).setColorFilter(UI_ACCENT_COLOR, PorterDuff.Mode.SRC_IN);
+                    }
+                    else {
+                        ((ImageButton) v).clearColorFilter();
+                    }
+                }
+            });
             updateCursorModeButton();
 
             mouseButtonBar = findViewById(R.id.mouseButtonBar);
@@ -394,8 +423,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             lastScrollStripY = event.getY();
                             return true;
                         case MotionEvent.ACTION_MOVE:
-                            conn.sendMouseHighResScroll(
-                                    (short)((event.getY() - lastScrollStripY) * SCROLL_STRIP_SPEED_FACTOR));
+                            int scrollDelta = (int)((event.getY() - lastScrollStripY) * SCROLL_STRIP_SPEED_FACTOR);
+                            if (prefConfig.invertScrollDirection) {
+                                scrollDelta = -scrollDelta;
+                            }
+                            conn.sendMouseHighResScroll((short) scrollDelta);
                             lastScrollStripY = event.getY();
                             return true;
                         case MotionEvent.ACTION_UP:
@@ -507,7 +539,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
         // Check if the user has enabled performance stats overlay
-        if (prefConfig.enablePerfOverlay) {
+        if (statsOverlayVisible) {
             performanceOverlayView.setVisibility(View.VISIBLE);
         }
 
@@ -760,7 +792,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     virtualController.show();
                 }
 
-                if (prefConfig.enablePerfOverlay) {
+                if (statsOverlayVisible) {
                     performanceOverlayView.setVisibility(View.VISIBLE);
                 }
 
@@ -1664,7 +1696,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private void recreateTouchContexts() {
         for (int i = 0; i < touchContextMap.length; i++) {
             if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView);
+                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView, prefConfig);
             }
             else {
                 touchContextMap[i] = new RelativeTouchContext(conn, i,

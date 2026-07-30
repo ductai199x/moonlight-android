@@ -6,8 +6,10 @@ import android.view.View;
 
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.MouseButtonPacket;
+import com.limelight.preferences.PreferenceConfiguration;
 
 public class AbsoluteTouchContext implements TouchContext {
+    private final PreferenceConfiguration prefConfig;
     private int lastTouchDownX = 0;
     private int lastTouchDownY = 0;
     private long lastTouchDownTime = 0;
@@ -66,11 +68,13 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD = 100;
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
-    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view)
+    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view,
+                                PreferenceConfiguration prefConfig)
     {
         this.conn = conn;
         this.actionIndex = actionIndex;
         this.targetView = view;
+        this.prefConfig = prefConfig;
         this.handler = new Handler(Looper.getMainLooper());
     }
 
@@ -209,7 +213,11 @@ public class AbsoluteTouchContext implements TouchContext {
             }
         }
         else if (actionIndex == 1) {
-            conn.sendMouseHighResScroll((short)((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR));
+            int scrollDelta = (eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR;
+            if (prefConfig.invertScrollDirection) {
+                scrollDelta = -scrollDelta;
+            }
+            conn.sendMouseHighResScroll((short) scrollDelta);
         }
 
         lastTouchLocationX = eventX;

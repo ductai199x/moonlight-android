@@ -122,6 +122,26 @@
             android:contentDescription="@string/quick_menu_quality_description" />
 
         <ImageButton
+            android:id="@+id/quickMenuScrollDirButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:focusable="false"
+            android:src="@drawable/ic_swap_vert"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quick_menu_scroll_dir_description" />
+
+        <ImageButton
+            android:id="@+id/quickMenuStatsButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:focusable="false"
+            android:src="@drawable/ic_stats"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quick_menu_stats_description" />
+
+        <ImageButton
             android:id="@+id/quickMenuDisconnectButton"
             android:layout_width="48dp"
             android:layout_height="44dp"

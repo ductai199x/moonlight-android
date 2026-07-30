@@ -290,7 +290,11 @@ public class RelativeTouchContext implements TouchContext {
 
                 if (pointerCount == 2) {
                     if (confirmedScroll) {
-                        conn.sendMouseHighResScroll((short)(deltaY * SCROLL_SPEED_FACTOR));
+                        int scrollDelta = deltaY * SCROLL_SPEED_FACTOR;
+                        if (prefConfig.invertScrollDirection) {
+                            scrollDelta = -scrollDelta;
+                        }
+                        conn.sendMouseHighResScroll((short) scrollDelta);
                     }
                 } else {
                     // Slow the cursor down for finer control in desktop mode,

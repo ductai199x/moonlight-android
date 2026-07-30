@@ -159,6 +159,9 @@ public class PreferenceConfiguration {
     public boolean gamepadMotionSensorsFallbackToDevice;
     public boolean enablePanZoom;
 
+    // Runtime-only state toggled from the in-stream quick menu
+    public boolean invertScrollDirection;
+
     public static boolean isNativeResolution(int width, int height) {
         // It's not a native resolution if it matches an existing resolution option
         if (width == 640 && height == 360) {
@@ -605,6 +608,7 @@ public class PreferenceConfiguration {
         config.gamepadMotionSensors = prefs.getBoolean(GAMEPAD_MOTION_SENSORS_PREF_STRING, DEFAULT_GAMEPAD_MOTION_SENSORS);
         config.gamepadMotionSensorsFallbackToDevice = prefs.getBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, DEFAULT_GAMEPAD_MOTION_FALLBACK);
         config.enablePanZoom = prefs.getBoolean(ENABLE_PAN_ZOOM_PREF_STRING, DEFAULT_ENABLE_PAN_ZOOM);
+        config.invertScrollDirection = true;
 
         return config;
     }
