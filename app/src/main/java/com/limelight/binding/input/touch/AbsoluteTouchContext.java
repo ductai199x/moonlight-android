@@ -9,7 +9,13 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.preferences.PreferenceConfiguration;
 
 public class AbsoluteTouchContext implements TouchContext {
+    public interface CursorPositionListener {
+        // Reports the absolute cursor position in StreamView-local pixels
+        void onAbsoluteCursorPositioned(int x, int y);
+    }
+
     private final PreferenceConfiguration prefConfig;
+    private final CursorPositionListener cursorPositionListener;
     private int lastTouchDownX = 0;
     private int lastTouchDownY = 0;
     private long lastTouchDownTime = 0;
@@ -69,12 +75,14 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
     public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view,
-                                PreferenceConfiguration prefConfig)
+                                PreferenceConfiguration prefConfig,
+                                CursorPositionListener cursorPositionListener)
     {
         this.conn = conn;
         this.actionIndex = actionIndex;
         this.targetView = view;
         this.prefConfig = prefConfig;
+        this.cursorPositionListener = cursorPositionListener;
         this.handler = new Handler(Looper.getMainLooper());
     }
 
@@ -119,6 +127,11 @@ public class AbsoluteTouchContext implements TouchContext {
         eventY = Math.min(Math.max(eventY, 0), targetView.getHeight());
 
         conn.sendMousePosition((short)eventX, (short)eventY, (short)targetView.getWidth(), (short)targetView.getHeight());
+
+        if (cursorPositionListener != null) {
+            // Keep the tracked cursor position in sync for trackpad mode
+            cursorPositionListener.onAbsoluteCursorPositioned(eventX, eventY);
+        }
     }
 
     @Override

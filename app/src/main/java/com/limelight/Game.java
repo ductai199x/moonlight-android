@@ -101,7 +101,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         OnGenericMotionListener, OnTouchListener, NvConnectionListener, EvdevListener,
         OnSystemUiVisibilityChangeListener, GameGestures, StreamView.InputCallbacks,
         PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener,
-        RelativeTouchContext.CursorMotionListener, StreamView.TextInputCallbacks {
+        RelativeTouchContext.CursorMotionListener, StreamView.TextInputCallbacks,
+        AbsoluteTouchContext.CursorPositionListener {
     private int lastButtonState = 0;
 
     // Only 2 touches are supported
@@ -1756,7 +1757,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private void recreateTouchContexts() {
         for (int i = 0; i < touchContextMap.length; i++) {
             if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView, prefConfig);
+                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView, prefConfig, this);
             }
             else {
                 touchContextMap[i] = new RelativeTouchContext(conn, i,
@@ -2138,6 +2139,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         updateStickyModifierStyle(findViewById(R.id.modifierShiftButton), false);
         updateStickyModifierStyle(findViewById(R.id.modifierCtrlButton), false);
         updateStickyModifierStyle(findViewById(R.id.modifierAltButton), false);
+    }
+
+    @Override
+    public void onAbsoluteCursorPositioned(int x, int y) {
+        // Direct touch moved the real cursor; keep the trackpad-mode estimate
+        // in sync so cursor following stays exact after a mode switch
+        relativeCursorX = x;
+        relativeCursorY = y;
+        relativeCursorInitialized = true;
     }
 
     @Override
@@ -2895,6 +2905,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         eventY = Math.min(Math.max(eventY, 0), streamView.getHeight());
 
         conn.sendMousePosition((short)eventX, (short)eventY, (short)streamView.getWidth(), (short)streamView.getHeight());
+        onAbsoluteCursorPositioned((int)eventX, (int)eventY);
     }
 
     @Override
