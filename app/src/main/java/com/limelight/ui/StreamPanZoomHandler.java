@@ -71,6 +71,9 @@ public class StreamPanZoomHandler {
             return;
         }
 
+        float viewportWidth = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+        float viewportHeight = parent.getHeight() - parent.getPaddingTop() - parent.getPaddingBottom();
+
         float screenX = streamView.getX() + streamX * scaleFactor;
         float screenY = streamView.getY() + streamY * scaleFactor;
 
@@ -78,14 +81,14 @@ public class StreamPanZoomHandler {
         if (screenX < followCursorMargin) {
             dx = followCursorMargin - screenX;
         }
-        else if (screenX > parent.getWidth() - followCursorMargin) {
-            dx = parent.getWidth() - followCursorMargin - screenX;
+        else if (screenX > viewportWidth - followCursorMargin) {
+            dx = viewportWidth - followCursorMargin - screenX;
         }
         if (screenY < followCursorMargin) {
             dy = followCursorMargin - screenY;
         }
-        else if (screenY > parent.getHeight() - followCursorMargin) {
-            dy = parent.getHeight() - followCursorMargin - screenY;
+        else if (screenY > viewportHeight - followCursorMargin) {
+            dy = viewportHeight - followCursorMargin - screenY;
         }
 
         if (dx != 0 || dy != 0) {
@@ -110,8 +113,11 @@ public class StreamPanZoomHandler {
 
         float scaledWidth = streamView.getWidth() * scaleFactor;
         float scaledHeight = streamView.getHeight() * scaleFactor;
-        float parentWidth = parent.getWidth();
-        float parentHeight = parent.getHeight();
+
+        // Padding on the parent shrinks the usable viewport (e.g. to keep the
+        // stream clear of the soft keyboard)
+        float parentWidth = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+        float parentHeight = parent.getHeight() - parent.getPaddingTop() - parent.getPaddingBottom();
 
         float x = streamView.getX();
         float y = streamView.getY();

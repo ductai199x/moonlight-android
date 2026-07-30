@@ -214,6 +214,13 @@
     <string name="mouse_left_button_description">Left mouse button</string>
     <string name="mouse_right_button_description">Right mouse button</string>
     <string name="scroll_strip_description">Scroll</string>
+    <string name="modifier_shift">Shift</string>
+    <string name="modifier_ctrl">Ctrl</string>
+    <string name="modifier_alt">Alt</string>
+    <string name="modifier_caps">Caps</string>
+    <string name="modifier_win_description">Windows key</string>
+    <string name="modifier_settings_description">Open quick menu</string>
+    <string name="modifier_ime_switch_description">Switch keyboard</string>
 
     <string name="category_on_screen_controls_settings">On-screen Controls Settings</string>
     <string name="title_checkbox_show_onscreen_controls">Show on-screen controls</string>

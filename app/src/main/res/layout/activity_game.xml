@@ -36,29 +36,38 @@
         android:preferKeepClear="true"
         android:visibility="gone" />
 
-    <ImageButton
-        android:id="@+id/panZoomToggleButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="10dp"
-        android:padding="10dp"
-        android:src="@drawable/ic_pan_zoom"
-        android:background="@drawable/pan_zoom_button_bg"
-        android:contentDescription="@string/pan_zoom_toggle_description"
-        android:visibility="gone" />
-
-    <ImageButton
+    <LinearLayout
         android:id="@+id/quickMenuHandle"
-        android:layout_width="40dp"
-        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
-        android:layout_marginEnd="8dp"
-        android:padding="8dp"
-        android:src="@drawable/ic_chevron_left"
+        android:layout_marginTop="180dp"
+        android:layout_marginEnd="10dp"
+        android:padding="6dp"
         android:background="@drawable/quick_menu_bg"
-        android:contentDescription="@string/quick_menu_open_description"
-        android:visibility="gone" />
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/quickMenuHandleChevron"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:focusable="false"
+            android:src="@drawable/ic_chevron_left"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quick_menu_open_description" />
+
+        <ImageButton
+            android:id="@+id/quickMenuHandleKeyboard"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="9dp"
+            android:focusable="false"
+            android:src="@drawable/ic_keyboard"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quick_menu_keyboard_description" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/quickMenu"
@@ -66,7 +75,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
-        android:layout_marginEnd="8dp"
+        android:layout_marginTop="180dp"
+        android:layout_marginEnd="10dp"
         android:padding="4dp"
         android:background="@drawable/quick_menu_bg"
         android:visibility="gone">
@@ -76,15 +86,27 @@
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:padding="10dp"
+            android:focusable="false"
             android:src="@drawable/ic_chevron_right"
             android:background="@android:color/transparent"
             android:contentDescription="@string/quick_menu_close_description" />
+
+        <ImageButton
+            android:id="@+id/quickMenuZoomButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:focusable="false"
+            android:src="@drawable/ic_pan_zoom"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/pan_zoom_toggle_description" />
 
         <ImageButton
             android:id="@+id/quickMenuKeyboardButton"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:padding="10dp"
+            android:focusable="false"
             android:src="@drawable/ic_keyboard"
             android:background="@android:color/transparent"
             android:contentDescription="@string/quick_menu_keyboard_description" />
@@ -94,6 +116,7 @@
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:padding="10dp"
+            android:focusable="false"
             android:src="@drawable/ic_mouse"
             android:background="@android:color/transparent"
             android:contentDescription="@string/quick_menu_cursor_mode_description" />
@@ -103,6 +126,7 @@
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:padding="10dp"
+            android:focusable="false"
             android:src="@drawable/ic_power"
             android:background="@android:color/transparent"
             android:contentDescription="@string/quick_menu_disconnect_description" />
@@ -114,24 +138,26 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="20dp"
         android:visibility="gone">
 
         <ImageButton
             android:id="@+id/mouseLeftButton"
-            android:layout_width="56dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="16dp"
-            android:padding="10dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="20dp"
+            android:padding="12dp"
+            android:focusable="false"
             android:src="@drawable/ic_mouse_left"
             android:background="@drawable/quick_menu_bg"
             android:contentDescription="@string/mouse_left_button_description" />
 
         <ImageButton
             android:id="@+id/mouseRightButton"
-            android:layout_width="56dp"
-            android:layout_height="48dp"
-            android:padding="10dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:padding="12dp"
+            android:focusable="false"
             android:src="@drawable/ic_mouse_right"
             android:background="@drawable/quick_menu_bg"
             android:contentDescription="@string/mouse_right_button_description" />
@@ -139,16 +165,126 @@
 
     <ImageButton
         android:id="@+id/scrollStrip"
-        android:layout_width="40dp"
-        android:layout_height="180dp"
-        android:layout_gravity="end|bottom"
-        android:layout_marginEnd="8dp"
-        android:layout_marginBottom="120dp"
-        android:src="@drawable/ic_scroll"
+        android:layout_width="36dp"
+        android:layout_height="170dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="10dp"
+        android:src="@drawable/ic_scroll_ridges"
         android:scaleType="center"
-        android:background="@drawable/quick_menu_bg"
+        android:focusable="false"
+        android:background="@drawable/scroll_wheel_bg"
         android:contentDescription="@string/scroll_strip_description"
         android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/modifierBar"
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_gravity="bottom"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:background="#F2262B33"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/modifierWinButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="12dp"
+            android:focusable="false"
+            android:src="@drawable/ic_windows"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/modifier_win_description" />
+
+        <Button
+            android:id="@+id/modifierShiftButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:focusable="false"
+            android:text="@string/modifier_shift"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:textColor="#EEEEEE"
+            android:background="@android:color/transparent" />
+
+        <Button
+            android:id="@+id/modifierCtrlButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:focusable="false"
+            android:text="@string/modifier_ctrl"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:textColor="#EEEEEE"
+            android:background="@android:color/transparent" />
+
+        <Button
+            android:id="@+id/modifierAltButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:focusable="false"
+            android:text="@string/modifier_alt"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:textColor="#EEEEEE"
+            android:background="@android:color/transparent" />
+
+        <Button
+            android:id="@+id/modifierCapsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:focusable="false"
+            android:text="@string/modifier_caps"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:textColor="#EEEEEE"
+            android:background="@android:color/transparent" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/modifierSettingsButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="11dp"
+            android:focusable="false"
+            android:src="@drawable/ic_settings"
+            android:tint="#EEEEEE"
+            android:scaleType="fitCenter"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/modifier_settings_description" />
+
+        <ImageButton
+            android:id="@+id/modifierImeSwitchButton"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:padding="11dp"
+            android:focusable="false"
+            android:src="@drawable/ic_keyboard"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/modifier_ime_switch_description" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/notificationOverlay"

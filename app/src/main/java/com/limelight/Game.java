@@ -52,6 +52,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Point;
+import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.media.AudioManager;
@@ -74,8 +75,11 @@ import android.view.View.OnGenericMotionListener;
 import android.view.View.OnSystemUiVisibilityChangeListener;
 import android.view.View.OnTouchListener;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageButton;
 import android.widget.TextView;
@@ -112,6 +116,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     private static final int THREE_FINGER_TAP_THRESHOLD = 300;
     private static final int SCROLL_STRIP_SPEED_FACTOR = 3;
+    private static final int MODIFIER_BAR_HEIGHT_DP = 52;
 
     private ControllerHandler controllerHandler;
     private KeyboardTranslator keyboardTranslator;
@@ -151,17 +156,22 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private int requestedNotificationOverlayVisibility = View.GONE;
     private TextView performanceOverlayView;
 
-    private ImageButton panZoomToggleButton;
+    private static final int UI_ACCENT_COLOR = 0xFF4FC3F7;
+
     private StreamPanZoomHandler panZoomHandler;
     private boolean panZoomModeActive = false;
     private float relativeCursorX, relativeCursorY;
     private boolean relativeCursorInitialized = false;
-    private ImageButton quickMenuHandle;
+    private View quickMenuHandle;
     private View quickMenu;
+    private ImageButton quickMenuZoomButton;
     private ImageButton quickMenuCursorModeButton;
     private View mouseButtonBar;
     private View scrollStrip;
     private float lastScrollStripY;
+    private View modifierBar;
+    private boolean modifierBarShowing = false;
+    private int stickyModifiers = 0;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -288,27 +298,31 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         performanceOverlayView = findViewById(R.id.performanceOverlay);
 
-        panZoomToggleButton = findViewById(R.id.panZoomToggleButton);
         quickMenuHandle = findViewById(R.id.quickMenuHandle);
         quickMenu = findViewById(R.id.quickMenu);
+        quickMenuZoomButton = findViewById(R.id.quickMenuZoomButton);
         quickMenuCursorModeButton = findViewById(R.id.quickMenuCursorModeButton);
         if (prefConfig.enablePanZoom) {
             panZoomHandler = new StreamPanZoomHandler(this, streamView);
-            panZoomToggleButton.setVisibility(View.VISIBLE);
-            panZoomToggleButton.setAlpha(0.5f);
-            panZoomToggleButton.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    setPanZoomModeActive(!panZoomModeActive);
-                }
-            });
 
             quickMenuHandle.setVisibility(View.VISIBLE);
-            quickMenuHandle.setOnClickListener(new View.OnClickListener() {
+            findViewById(R.id.quickMenuHandleChevron).setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     quickMenuHandle.setVisibility(View.GONE);
                     quickMenu.setVisibility(View.VISIBLE);
+                }
+            });
+            findViewById(R.id.quickMenuHandleKeyboard).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toggleKeyboard();
+                }
+            });
+            quickMenuZoomButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    setPanZoomModeActive(!panZoomModeActive);
                 }
             });
             findViewById(R.id.quickMenuCollapseButton).setOnClickListener(new View.OnClickListener() {
@@ -367,6 +381,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     }
                 }
             });
+
+            setupModifierBar();
         }
 
         inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
@@ -690,7 +706,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 performanceOverlayView.setVisibility(View.GONE);
                 notificationOverlayView.setVisibility(View.GONE);
-                panZoomToggleButton.setVisibility(View.GONE);
                 quickMenuHandle.setVisibility(View.GONE);
                 quickMenu.setVisibility(View.GONE);
                 mouseButtonBar.setVisibility(View.GONE);
@@ -721,7 +736,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 }
 
                 if (prefConfig.enablePanZoom) {
-                    panZoomToggleButton.setVisibility(View.VISIBLE);
                     quickMenuHandle.setVisibility(View.VISIBLE);
                     mouseButtonBar.setVisibility(View.VISIBLE);
                     scrollStrip.setVisibility(View.VISIBLE);
@@ -1407,7 +1421,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     private byte getModifierState() {
-        return (byte) modifierFlags;
+        return (byte) (modifierFlags | stickyModifiers);
     }
 
     @Override
@@ -1648,6 +1662,166 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 R.drawable.ic_mouse : R.drawable.ic_touch_app);
     }
 
+    private void setupModifierBar() {
+        modifierBar = findViewById(R.id.modifierBar);
+
+        setupStickyModifierButton(findViewById(R.id.modifierWinButton),
+                KeyboardPacket.MODIFIER_META, KeyEvent.KEYCODE_META_LEFT);
+        setupStickyModifierButton(findViewById(R.id.modifierShiftButton),
+                KeyboardPacket.MODIFIER_SHIFT, KeyEvent.KEYCODE_SHIFT_LEFT);
+        setupStickyModifierButton(findViewById(R.id.modifierCtrlButton),
+                KeyboardPacket.MODIFIER_CTRL, KeyEvent.KEYCODE_CTRL_LEFT);
+        setupStickyModifierButton(findViewById(R.id.modifierAltButton),
+                KeyboardPacket.MODIFIER_ALT, KeyEvent.KEYCODE_ALT_LEFT);
+
+        findViewById(R.id.modifierCapsButton).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Caps Lock toggles host state with a press, rather than being held
+                short translated = keyboardTranslator.translate(KeyEvent.KEYCODE_CAPS_LOCK, -1);
+                conn.sendKeyboardInput(translated, KeyboardPacket.KEY_DOWN, getModifierState(), (byte) 0);
+                conn.sendKeyboardInput(translated, KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+            }
+        });
+        findViewById(R.id.modifierSettingsButton).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                quickMenuHandle.setVisibility(View.GONE);
+                quickMenu.setVisibility(View.VISIBLE);
+            }
+        });
+        findViewById(R.id.modifierImeSwitchButton).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                inputManager.showInputMethodPicker();
+            }
+        });
+
+        // Show the bar above the soft keyboard whenever the keyboard is visible
+        final FrameLayout contentView = findViewById(android.R.id.content);
+
+        // The bar is translated into the bottom padding reserved for the
+        // keyboard, so padding must not clip it
+        contentView.setClipToPadding(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            contentView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override
+                public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                    updateModifierBar(insets.isVisible(WindowInsets.Type.ime()),
+                            insets.getInsets(WindowInsets.Type.ime()).bottom);
+                    return insets;
+                }
+            });
+        }
+        else {
+            contentView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override
+                public void onGlobalLayout() {
+                    Rect visibleFrame = new Rect();
+                    contentView.getWindowVisibleDisplayFrame(visibleFrame);
+
+                    int rootHeight = contentView.getRootView().getHeight();
+                    int coveredHeight = rootHeight - visibleFrame.bottom;
+                    updateModifierBar(coveredHeight > rootHeight * 0.15, coveredHeight);
+                }
+            });
+        }
+    }
+
+    private void updateModifierBar(boolean keyboardVisible, int keyboardHeight) {
+        if (keyboardVisible != modifierBarShowing) {
+            modifierBarShowing = keyboardVisible;
+            if (keyboardVisible) {
+                modifierBar.setVisibility(View.VISIBLE);
+            }
+            else {
+                modifierBar.setVisibility(View.GONE);
+                releaseStickyModifiers();
+            }
+        }
+
+        // Shrink the usable viewport so the stream and the floating controls
+        // stay clear of the keyboard and the modifier bar, and restore it when
+        // the keyboard goes away. The StreamView re-letterboxes into the
+        // reduced space and any zoom transform is re-clamped by its layout
+        // change listener. The window itself is not resized or panned for the
+        // keyboard (adjustNothing).
+        int barHeight = (int) (MODIFIER_BAR_HEIGHT_DP * getResources().getDisplayMetrics().density);
+        View contentView = findViewById(android.R.id.content);
+        int bottomInset = keyboardVisible ? Math.max(0, keyboardHeight) + barHeight : 0;
+        if (contentView.getPaddingBottom() != bottomInset) {
+            contentView.setPadding(0, 0, 0, bottomInset);
+        }
+
+        // The bar lays out above the padded area, so shift it down into the
+        // slice reserved for it, directly on top of the keyboard
+        modifierBar.setTranslationY(keyboardVisible ? barHeight : 0);
+    }
+
+    private void setupStickyModifierButton(final View button, final byte modifierFlag, final int androidKeyCode) {
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                short translated = keyboardTranslator.translate(androidKeyCode, -1);
+
+                if ((stickyModifiers & modifierFlag) == 0) {
+                    stickyModifiers |= modifierFlag;
+                    conn.sendKeyboardInput(translated, KeyboardPacket.KEY_DOWN, getModifierState(), (byte) 0);
+                }
+                else {
+                    stickyModifiers &= ~modifierFlag;
+                    conn.sendKeyboardInput(translated, KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+                }
+
+                updateStickyModifierStyle(button, (stickyModifiers & modifierFlag) != 0);
+            }
+        });
+    }
+
+    private void updateStickyModifierStyle(View button, boolean active) {
+        if (button instanceof Button) {
+            ((Button) button).setTextColor(active ? UI_ACCENT_COLOR : 0xFFEEEEEE);
+        }
+        else if (button instanceof ImageButton) {
+            if (active) {
+                ((ImageButton) button).setColorFilter(UI_ACCENT_COLOR, PorterDuff.Mode.SRC_IN);
+            }
+            else {
+                ((ImageButton) button).clearColorFilter();
+            }
+        }
+    }
+
+    private void releaseStickyModifiers() {
+        if (stickyModifiers == 0) {
+            return;
+        }
+
+        if ((stickyModifiers & KeyboardPacket.MODIFIER_META) != 0) {
+            conn.sendKeyboardInput(keyboardTranslator.translate(KeyEvent.KEYCODE_META_LEFT, -1),
+                    KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+        }
+        if ((stickyModifiers & KeyboardPacket.MODIFIER_SHIFT) != 0) {
+            conn.sendKeyboardInput(keyboardTranslator.translate(KeyEvent.KEYCODE_SHIFT_LEFT, -1),
+                    KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+        }
+        if ((stickyModifiers & KeyboardPacket.MODIFIER_CTRL) != 0) {
+            conn.sendKeyboardInput(keyboardTranslator.translate(KeyEvent.KEYCODE_CTRL_LEFT, -1),
+                    KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+        }
+        if ((stickyModifiers & KeyboardPacket.MODIFIER_ALT) != 0) {
+            conn.sendKeyboardInput(keyboardTranslator.translate(KeyEvent.KEYCODE_ALT_LEFT, -1),
+                    KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+        }
+        stickyModifiers = 0;
+
+        updateStickyModifierStyle(findViewById(R.id.modifierWinButton), false);
+        updateStickyModifierStyle(findViewById(R.id.modifierShiftButton), false);
+        updateStickyModifierStyle(findViewById(R.id.modifierCtrlButton), false);
+        updateStickyModifierStyle(findViewById(R.id.modifierAltButton), false);
+    }
+
     @Override
     public void onRelativeCursorMoved(float deltaX, float deltaY) {
         if (!relativeCursorInitialized) {
@@ -1670,7 +1844,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private void setPanZoomModeActive(boolean active) {
         LimeLog.info("Pan/zoom navigation mode: " + (active ? "on" : "off"));
         panZoomModeActive = active;
-        panZoomToggleButton.setAlpha(active ? 1.0f : 0.5f);
+        if (active) {
+            quickMenuZoomButton.setColorFilter(UI_ACCENT_COLOR, PorterDuff.Mode.SRC_IN);
+        }
+        else {
+            quickMenuZoomButton.clearColorFilter();
+        }
 
         // Cancel any in-progress touches so a gesture that began before the mode
         // change doesn't produce input on the other side of it
