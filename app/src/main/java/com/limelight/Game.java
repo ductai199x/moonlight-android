@@ -30,6 +30,7 @@ import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.GameGestures;
+import com.limelight.ui.StreamPanZoomHandler;
 import com.limelight.ui.StreamView;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.ServerHelper;
@@ -149,6 +150,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private TextView performanceOverlayView;
 
     private ImageButton panZoomToggleButton;
+    private StreamPanZoomHandler panZoomHandler;
     private boolean panZoomModeActive = false;
 
     private MediaCodecDecoderRenderer decoderRenderer;
@@ -278,6 +280,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         panZoomToggleButton = findViewById(R.id.panZoomToggleButton);
         if (prefConfig.enablePanZoom) {
+            panZoomHandler = new StreamPanZoomHandler(this, streamView);
             panZoomToggleButton.setVisibility(View.VISIBLE);
             panZoomToggleButton.setAlpha(0.5f);
             panZoomToggleButton.setOnClickListener(new View.OnClickListener() {
@@ -614,6 +617,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 performanceOverlayView.setVisibility(View.GONE);
                 notificationOverlayView.setVisibility(View.GONE);
                 panZoomToggleButton.setVisibility(View.GONE);
+
+                // Show the whole stream in the PiP window
+                if (panZoomHandler != null) {
+                    panZoomHandler.reset();
+                }
 
                 // Disable sensors while in PiP mode
                 controllerHandler.disableSensors();
@@ -2017,6 +2025,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 // In pan/zoom navigation mode, touches manipulate the local view of the
                 // stream rather than being sent to the host
                 if (panZoomModeActive) {
+                    panZoomHandler.handleTouchEvent(event);
                     return true;
                 }
 
