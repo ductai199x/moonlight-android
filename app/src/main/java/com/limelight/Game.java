@@ -93,7 +93,8 @@ import java.util.Locale;
 public class Game extends Activity implements SurfaceHolder.Callback,
         OnGenericMotionListener, OnTouchListener, NvConnectionListener, EvdevListener,
         OnSystemUiVisibilityChangeListener, GameGestures, StreamView.InputCallbacks,
-        PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener {
+        PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener,
+        RelativeTouchContext.CursorMotionListener {
     private int lastButtonState = 0;
 
     // Only 2 touches are supported
@@ -152,6 +153,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private ImageButton panZoomToggleButton;
     private StreamPanZoomHandler panZoomHandler;
     private boolean panZoomModeActive = false;
+    private float relativeCursorX, relativeCursorY;
+    private boolean relativeCursorInitialized = false;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -519,7 +522,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             else {
                 touchContextMap[i] = new RelativeTouchContext(conn, i,
                         REFERENCE_HORIZ_RES, REFERENCE_VERT_RES,
-                        streamView, prefConfig);
+                        streamView, prefConfig, this);
             }
         }
 
@@ -1517,6 +1520,25 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         LimeLog.info("Toggling keyboard overlay");
         InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         inputManager.toggleSoftInput(0, 0);
+    }
+
+    @Override
+    public void onRelativeCursorMoved(float deltaX, float deltaY) {
+        if (!relativeCursorInitialized) {
+            // Assume the cursor starts centered; the estimate re-syncs whenever
+            // the cursor is pushed against an edge of the desktop
+            relativeCursorX = streamView.getWidth() / 2.f;
+            relativeCursorY = streamView.getHeight() / 2.f;
+            relativeCursorInitialized = true;
+        }
+
+        relativeCursorX = Math.max(0, Math.min(relativeCursorX + deltaX, streamView.getWidth()));
+        relativeCursorY = Math.max(0, Math.min(relativeCursorY + deltaY, streamView.getHeight()));
+
+        // Keep the cursor visible while zoomed by panning the viewport with it
+        if (panZoomHandler != null && !panZoomModeActive) {
+            panZoomHandler.followCursor(relativeCursorX, relativeCursorY);
+        }
     }
 
     private void setPanZoomModeActive(boolean active) {

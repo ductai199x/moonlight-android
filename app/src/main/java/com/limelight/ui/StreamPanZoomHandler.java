@@ -18,15 +18,18 @@ import android.view.View;
 public class StreamPanZoomHandler {
     private static final float MIN_SCALE = 1.0f;
     private static final float MAX_SCALE = 5.0f;
+    private static final float FOLLOW_CURSOR_MARGIN_DP = 48;
 
     private final View streamView;
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector panDetector;
+    private final float followCursorMargin;
 
     private float scaleFactor = 1.0f;
 
     public StreamPanZoomHandler(Context context, View streamView) {
         this.streamView = streamView;
+        this.followCursorMargin = FOLLOW_CURSOR_MARGIN_DP * context.getResources().getDisplayMetrics().density;
 
         scaleDetector = new ScaleGestureDetector(context, new ScaleListener());
         panDetector = new GestureDetector(context, new PanListener());
@@ -53,6 +56,43 @@ public class StreamPanZoomHandler {
 
     public float getScaleFactor() {
         return scaleFactor;
+    }
+
+    // Pans the view (if zoomed) to keep the given StreamView-local point inside
+    // the visible viewport with a small margin. Used to make the viewport follow
+    // the mouse cursor to the edges of the desktop in trackpad mode.
+    public void followCursor(float streamX, float streamY) {
+        if (scaleFactor <= MIN_SCALE) {
+            return;
+        }
+
+        View parent = (View) streamView.getParent();
+        if (parent == null) {
+            return;
+        }
+
+        float screenX = streamView.getX() + streamX * scaleFactor;
+        float screenY = streamView.getY() + streamY * scaleFactor;
+
+        float dx = 0, dy = 0;
+        if (screenX < followCursorMargin) {
+            dx = followCursorMargin - screenX;
+        }
+        else if (screenX > parent.getWidth() - followCursorMargin) {
+            dx = parent.getWidth() - followCursorMargin - screenX;
+        }
+        if (screenY < followCursorMargin) {
+            dy = followCursorMargin - screenY;
+        }
+        else if (screenY > parent.getHeight() - followCursorMargin) {
+            dy = parent.getHeight() - followCursorMargin - screenY;
+        }
+
+        if (dx != 0 || dy != 0) {
+            streamView.setX(streamView.getX() + dx);
+            streamView.setY(streamView.getY() + dy);
+            constrainToBounds();
+        }
     }
 
     public void reset() {

@@ -9,6 +9,14 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.preferences.PreferenceConfiguration;
 
 public class RelativeTouchContext implements TouchContext {
+    public interface CursorMotionListener {
+        // Reports cursor motion in StreamView-local pixels. This mirrors the
+        // deltas sent to the host, so it is exact in absolute mouse mode and a
+        // best-effort estimate otherwise (the host may apply pointer
+        // acceleration to relative motion).
+        void onRelativeCursorMoved(float deltaX, float deltaY);
+    }
+
     private int lastTouchX = 0;
     private int lastTouchY = 0;
     private int originalTouchX = 0;
@@ -30,6 +38,7 @@ public class RelativeTouchContext implements TouchContext {
     private final View targetView;
     private final PreferenceConfiguration prefConfig;
     private final Handler handler;
+    private final CursorMotionListener cursorMotionListener;
 
     private final Runnable dragTimerRunnable = new Runnable() {
         @Override
@@ -93,7 +102,8 @@ public class RelativeTouchContext implements TouchContext {
 
     public RelativeTouchContext(NvConnection conn, int actionIndex,
                                 int referenceWidth, int referenceHeight,
-                                View view, PreferenceConfiguration prefConfig)
+                                View view, PreferenceConfiguration prefConfig,
+                                CursorMotionListener cursorMotionListener)
     {
         this.conn = conn;
         this.actionIndex = actionIndex;
@@ -102,6 +112,7 @@ public class RelativeTouchContext implements TouchContext {
         this.targetView = view;
         this.prefConfig = prefConfig;
         this.handler = new Handler(Looper.getMainLooper());
+        this.cursorMotionListener = cursorMotionListener;
     }
 
     @Override
@@ -277,9 +288,21 @@ public class RelativeTouchContext implements TouchContext {
                                 (short) deltaY,
                                 (short) targetView.getWidth(),
                                 (short) targetView.getHeight());
+
+                        if (cursorMotionListener != null) {
+                            // Deltas are accumulated by the host as-is in this mode
+                            cursorMotionListener.onRelativeCursorMoved(deltaX, deltaY);
+                        }
                     }
                     else {
                         conn.sendMouseMove((short) deltaX, (short) deltaY);
+
+                        if (cursorMotionListener != null) {
+                            // Convert the reference-resolution deltas back to view pixels
+                            cursorMotionListener.onRelativeCursorMoved(
+                                    (float) (deltaX / xFactor),
+                                    (float) (deltaY / yFactor));
+                        }
                     }
                 }
 
