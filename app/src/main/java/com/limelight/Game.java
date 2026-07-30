@@ -76,6 +76,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -146,6 +147,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private TextView notificationOverlayView;
     private int requestedNotificationOverlayVisibility = View.GONE;
     private TextView performanceOverlayView;
+
+    private ImageButton panZoomToggleButton;
+    private boolean panZoomModeActive = false;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -271,6 +275,18 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         notificationOverlayView = findViewById(R.id.notificationOverlay);
 
         performanceOverlayView = findViewById(R.id.performanceOverlay);
+
+        panZoomToggleButton = findViewById(R.id.panZoomToggleButton);
+        if (prefConfig.enablePanZoom) {
+            panZoomToggleButton.setVisibility(View.VISIBLE);
+            panZoomToggleButton.setAlpha(0.5f);
+            panZoomToggleButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    setPanZoomModeActive(!panZoomModeActive);
+                }
+            });
+        }
 
         inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
 
@@ -597,6 +613,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 performanceOverlayView.setVisibility(View.GONE);
                 notificationOverlayView.setVisibility(View.GONE);
+                panZoomToggleButton.setVisibility(View.GONE);
 
                 // Disable sensors while in PiP mode
                 controllerHandler.disableSensors();
@@ -615,6 +632,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 if (prefConfig.enablePerfOverlay) {
                     performanceOverlayView.setVisibility(View.VISIBLE);
+                }
+
+                if (prefConfig.enablePanZoom) {
+                    panZoomToggleButton.setVisibility(View.VISIBLE);
                 }
 
                 notificationOverlayView.setVisibility(requestedNotificationOverlayVisibility);
@@ -1485,6 +1506,18 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         inputManager.toggleSoftInput(0, 0);
     }
 
+    private void setPanZoomModeActive(boolean active) {
+        LimeLog.info("Pan/zoom navigation mode: " + (active ? "on" : "off"));
+        panZoomModeActive = active;
+        panZoomToggleButton.setAlpha(active ? 1.0f : 0.5f);
+
+        // Cancel any in-progress touches so a gesture that began before the mode
+        // change doesn't produce input on the other side of it
+        for (TouchContext aTouchContext : touchContextMap) {
+            aTouchContext.cancelTouch();
+        }
+    }
+
     private byte getLiTouchTypeFromEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
@@ -1978,6 +2011,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         (virtualController.getControllerMode() == VirtualController.ControllerMode.MoveButtons ||
                          virtualController.getControllerMode() == VirtualController.ControllerMode.ResizeButtons)) {
                     // Ignore presses when the virtual controller is being configured
+                    return true;
+                }
+
+                // In pan/zoom navigation mode, touches manipulate the local view of the
+                // stream rather than being sent to the host
+                if (panZoomModeActive) {
                     return true;
                 }
 

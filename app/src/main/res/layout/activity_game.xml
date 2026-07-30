@@ -36,6 +36,18 @@
         android:preferKeepClear="true"
         android:visibility="gone" />
 
+    <ImageButton
+        android:id="@+id/panZoomToggleButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="10dp"
+        android:padding="10dp"
+        android:src="@drawable/ic_pan_zoom"
+        android:background="@drawable/pan_zoom_button_bg"
+        android:contentDescription="@string/pan_zoom_toggle_description"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/notificationOverlay"
         android:layout_width="wrap_content"
