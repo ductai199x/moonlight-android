@@ -587,6 +587,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
             }
         }
+        else if (prefConfig.enablePanZoom) {
+            // Zoom and pan make portrait orientation usable for desktop streaming,
+            // so let the user rotate the device freely
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+        }
         else {
             // For regular displays, we always request landscape
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE);
@@ -1572,10 +1577,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         float normalizedY = event.getY(pointerIndex);
 
         // For the containing background view, we must subtract the origin
-        // of the StreamView to get video-relative coordinates.
+        // of the StreamView and divide out any navigation mode zoom to get
+        // video-relative coordinates.
         if (view != streamView) {
-            normalizedX -= streamView.getX();
-            normalizedY -= streamView.getY();
+            normalizedX = (normalizedX - streamView.getX()) / streamView.getScaleX();
+            normalizedY = (normalizedY - streamView.getY()) / streamView.getScaleY();
         }
 
         normalizedX = Math.max(normalizedX, 0.0f);
@@ -2030,21 +2036,25 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 }
 
                 // If this is the parent view, we'll offset our coordinates to appear as if they
-                // are relative to the StreamView like our StreamView touch events are.
-                float xOffset, yOffset;
+                // are relative to the StreamView like our StreamView touch events are. The
+                // StreamView may also be scaled by navigation mode zoom, which the parent
+                // view's coordinates don't reflect, so we must divide that scale back out.
+                float xOffset, yOffset, coordinateScale;
                 if (view != streamView && !prefConfig.touchscreenTrackpad) {
                     xOffset = -streamView.getX();
                     yOffset = -streamView.getY();
+                    coordinateScale = streamView.getScaleX();
                 }
                 else {
                     xOffset = 0.f;
                     yOffset = 0.f;
+                    coordinateScale = 1.f;
                 }
 
                 int actionIndex = event.getActionIndex();
 
-                int eventX = (int)(event.getX(actionIndex) + xOffset);
-                int eventY = (int)(event.getY(actionIndex) + yOffset);
+                int eventX = (int)((event.getX(actionIndex) + xOffset) / coordinateScale);
+                int eventY = (int)((event.getY(actionIndex) + yOffset) / coordinateScale);
 
                 // Special handling for 3 finger gesture
                 if (event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN &&
@@ -2109,8 +2119,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     if (actionIndex == 0 && event.getPointerCount() > 1 && !context.isCancelled()) {
                         // The original secondary touch now becomes primary
                         context.touchDownEvent(
-                                (int)(event.getX(1) + xOffset),
-                                (int)(event.getY(1) + yOffset),
+                                (int)((event.getX(1) + xOffset) / coordinateScale),
+                                (int)((event.getY(1) + yOffset) / coordinateScale),
                                 event.getEventTime(), false);
                     }
                     break;
@@ -2124,8 +2134,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             if (aTouchContextMap.getActionIndex() < event.getPointerCount())
                             {
                                 aTouchContextMap.touchMoveEvent(
-                                        (int)(event.getHistoricalX(aTouchContextMap.getActionIndex(), i) + xOffset),
-                                        (int)(event.getHistoricalY(aTouchContextMap.getActionIndex(), i) + yOffset),
+                                        (int)((event.getHistoricalX(aTouchContextMap.getActionIndex(), i) + xOffset) / coordinateScale),
+                                        (int)((event.getHistoricalY(aTouchContextMap.getActionIndex(), i) + yOffset) / coordinateScale),
                                         event.getHistoricalEventTime(i));
                             }
                         }
@@ -2136,8 +2146,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         if (aTouchContextMap.getActionIndex() < event.getPointerCount())
                         {
                             aTouchContextMap.touchMoveEvent(
-                                    (int)(event.getX(aTouchContextMap.getActionIndex()) + xOffset),
-                                    (int)(event.getY(aTouchContextMap.getActionIndex()) + yOffset),
+                                    (int)((event.getX(aTouchContextMap.getActionIndex()) + xOffset) / coordinateScale),
+                                    (int)((event.getY(aTouchContextMap.getActionIndex()) + yOffset) / coordinateScale),
                                     event.getEventTime());
                         }
                     }
@@ -2178,9 +2188,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
         else {
             // For the containing background view, we must subtract the origin
-            // of the StreamView to get video-relative coordinates.
-            eventX = event.getX(0) - streamView.getX();
-            eventY = event.getY(0) - streamView.getY();
+            // of the StreamView and divide out any navigation mode zoom to get
+            // video-relative coordinates.
+            eventX = (event.getX(0) - streamView.getX()) / streamView.getScaleX();
+            eventY = (event.getY(0) - streamView.getY()) / streamView.getScaleY();
         }
 
         if (event.getPointerCount() == 1 && event.getActionIndex() == 0 &&
