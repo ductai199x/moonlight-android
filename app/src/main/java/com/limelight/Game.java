@@ -111,6 +111,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private static final int STYLUS_UP_DEAD_ZONE_RADIUS = 50;
 
     private static final int THREE_FINGER_TAP_THRESHOLD = 300;
+    private static final int SCROLL_STRIP_SPEED_FACTOR = 3;
 
     private ControllerHandler controllerHandler;
     private KeyboardTranslator keyboardTranslator;
@@ -158,6 +159,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private ImageButton quickMenuHandle;
     private View quickMenu;
     private ImageButton quickMenuCursorModeButton;
+    private View mouseButtonBar;
+    private View scrollStrip;
+    private float lastScrollStripY;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -333,6 +337,36 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 }
             });
             updateCursorModeButton();
+
+            mouseButtonBar = findViewById(R.id.mouseButtonBar);
+            mouseButtonBar.setVisibility(View.VISIBLE);
+            findViewById(R.id.mouseLeftButton).setOnTouchListener(
+                    createMouseButtonTouchListener(MouseButtonPacket.BUTTON_LEFT));
+            findViewById(R.id.mouseRightButton).setOnTouchListener(
+                    createMouseButtonTouchListener(MouseButtonPacket.BUTTON_RIGHT));
+
+            scrollStrip = findViewById(R.id.scrollStrip);
+            scrollStrip.setVisibility(View.VISIBLE);
+            scrollStrip.setOnTouchListener(new OnTouchListener() {
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            lastScrollStripY = event.getY();
+                            return true;
+                        case MotionEvent.ACTION_MOVE:
+                            conn.sendMouseHighResScroll(
+                                    (short)((event.getY() - lastScrollStripY) * SCROLL_STRIP_SPEED_FACTOR));
+                            lastScrollStripY = event.getY();
+                            return true;
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                            return true;
+                        default:
+                            return false;
+                    }
+                }
+            });
         }
 
         inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
@@ -659,6 +693,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 panZoomToggleButton.setVisibility(View.GONE);
                 quickMenuHandle.setVisibility(View.GONE);
                 quickMenu.setVisibility(View.GONE);
+                mouseButtonBar.setVisibility(View.GONE);
+                scrollStrip.setVisibility(View.GONE);
 
                 // Show the whole stream in the PiP window
                 if (panZoomHandler != null) {
@@ -687,6 +723,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 if (prefConfig.enablePanZoom) {
                     panZoomToggleButton.setVisibility(View.VISIBLE);
                     quickMenuHandle.setVisibility(View.VISIBLE);
+                    mouseButtonBar.setVisibility(View.VISIBLE);
+                    scrollStrip.setVisibility(View.VISIBLE);
                 }
 
                 notificationOverlayView.setVisibility(requestedNotificationOverlayVisibility);
@@ -1555,6 +1593,29 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         LimeLog.info("Toggling keyboard overlay");
         InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         inputManager.toggleSoftInput(0, 0);
+    }
+
+    private OnTouchListener createMouseButtonTouchListener(final byte mouseButton) {
+        // Behaves like a physical mouse button: held while pressed, so drags
+        // are possible with the cursor moving on another finger
+        return new OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        v.setPressed(true);
+                        conn.sendMouseButtonDown(mouseButton);
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        v.setPressed(false);
+                        conn.sendMouseButtonUp(mouseButton);
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        };
     }
 
     private void recreateTouchContexts() {

@@ -211,6 +211,9 @@
     <string name="quick_menu_disconnect_description">Disconnect</string>
     <string name="cursor_mode_trackpad">Touchscreen is a trackpad</string>
     <string name="cursor_mode_direct">Touchscreen controls the cursor directly</string>
+    <string name="mouse_left_button_description">Left mouse button</string>
+    <string name="mouse_right_button_description">Right mouse button</string>
+    <string name="scroll_strip_description">Scroll</string>
 
     <string name="category_on_screen_controls_settings">On-screen Controls Settings</string>
     <string name="title_checkbox_show_onscreen_controls">Show on-screen controls</string>
