@@ -25,6 +25,11 @@ public class StreamPanZoomHandler {
     public static final int IMPLICIT_PASS = 0;
     public static final int IMPLICIT_CONSUMED = 1;
     public static final int IMPLICIT_CLAIM_STARTED = 2;
+    public static final int IMPLICIT_SMART_ZOOM = 3;
+
+    private static final float SMART_ZOOM_SCALE = 2.5f;
+    private static final int TWO_FINGER_TAP_TIME_MS = 250;
+    private static final int SMART_ZOOM_DOUBLE_TAP_TIME_MS = 400;
 
     private static final int GESTURE_IDLE = 0;
     private static final int GESTURE_UNDECIDED = 1;
@@ -40,8 +45,11 @@ public class StreamPanZoomHandler {
     private float scaleFactor = 1.0f;
 
     private int implicitGestureState = GESTURE_IDLE;
+    private long implicitStartTime;
     private float implicitStartSpan, implicitStartFocusX, implicitStartFocusY;
     private float implicitPrevSpan, implicitPrevFocusX, implicitPrevFocusY;
+    private long lastTwoFingerTapTime;
+    private float lastTwoFingerTapFocusX, lastTwoFingerTapFocusY;
 
     public StreamPanZoomHandler(Context context, View streamView) {
         this.streamView = streamView;
@@ -92,6 +100,7 @@ public class StreamPanZoomHandler {
                 }
                 if (implicitGestureState == GESTURE_IDLE && event.getPointerCount() == 2) {
                     implicitGestureState = GESTURE_UNDECIDED;
+                    implicitStartTime = event.getEventTime();
                     implicitStartSpan = pointerSpan(event);
                     implicitStartFocusX = pointerFocusX(event);
                     implicitStartFocusY = pointerFocusY(event);
@@ -143,6 +152,21 @@ public class StreamPanZoomHandler {
                 if (implicitGestureState == GESTURE_UNDECIDED) {
                     // Released before moving enough to decide: it was a tap
                     implicitGestureState = GESTURE_REJECTED;
+
+                    if (event.getEventTime() - implicitStartTime < TWO_FINGER_TAP_TIME_MS) {
+                        // Two quick two-finger taps in the same place toggle smart zoom
+                        if (event.getEventTime() - lastTwoFingerTapTime < SMART_ZOOM_DOUBLE_TAP_TIME_MS &&
+                                Math.hypot(implicitStartFocusX - lastTwoFingerTapFocusX,
+                                        implicitStartFocusY - lastTwoFingerTapFocusY) < implicitDecisionSlop * 3) {
+                            lastTwoFingerTapTime = 0;
+                            smartZoomToggle(implicitStartFocusX, implicitStartFocusY);
+                            return IMPLICIT_SMART_ZOOM;
+                        }
+
+                        lastTwoFingerTapTime = event.getEventTime();
+                        lastTwoFingerTapFocusX = implicitStartFocusX;
+                        lastTwoFingerTapFocusY = implicitStartFocusY;
+                    }
                 }
                 return IMPLICIT_PASS;
 
@@ -159,6 +183,58 @@ public class StreamPanZoomHandler {
 
     public void resetImplicitGesture() {
         implicitGestureState = GESTURE_IDLE;
+    }
+
+    // Toggles between fit-to-screen and a fixed zoom level anchored at the
+    // given point in parent coordinates
+    public void smartZoomToggle(float focusX, float focusY) {
+        if (scaleFactor > MIN_SCALE + 0.01f) {
+            reset();
+            return;
+        }
+
+        float x = focusX + (streamView.getX() - focusX) / scaleFactor * SMART_ZOOM_SCALE;
+        float y = focusY + (streamView.getY() - focusY) / scaleFactor * SMART_ZOOM_SCALE;
+
+        scaleFactor = SMART_ZOOM_SCALE;
+        streamView.setScaleX(scaleFactor);
+        streamView.setScaleY(scaleFactor);
+        streamView.setX(x);
+        streamView.setY(y);
+        constrainToBounds();
+    }
+
+    // Returns the center of the visible viewport in content fractions (0..1),
+    // for persisting the view across sessions
+    public float[] getViewportCenter() {
+        View parent = (View) streamView.getParent();
+        if (parent == null || streamView.getWidth() == 0) {
+            return new float[] { 0.5f, 0.5f };
+        }
+
+        float viewportCenterX = (parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight()) / 2.f;
+        float viewportCenterY = (parent.getHeight() - parent.getPaddingTop() - parent.getPaddingBottom()) / 2.f;
+        float cx = (viewportCenterX - streamView.getX()) / scaleFactor / streamView.getWidth();
+        float cy = (viewportCenterY - streamView.getY()) / scaleFactor / streamView.getHeight();
+        return new float[] { cx, cy };
+    }
+
+    public void applyViewState(float scale, float centerXFraction, float centerYFraction) {
+        View parent = (View) streamView.getParent();
+        if (parent == null || streamView.getWidth() == 0) {
+            return;
+        }
+
+        scaleFactor = Math.max(MIN_SCALE, Math.min(scale, MAX_SCALE));
+        streamView.setScaleX(scaleFactor);
+        streamView.setScaleY(scaleFactor);
+
+        float viewportCenterX = (parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight()) / 2.f;
+        float viewportCenterY = (parent.getHeight() - parent.getPaddingTop() - parent.getPaddingBottom()) / 2.f;
+        streamView.setX(viewportCenterX - centerXFraction * streamView.getWidth() * scaleFactor);
+        streamView.setY(viewportCenterY - centerYFraction * streamView.getHeight() * scaleFactor);
+
+        constrainToBounds();
     }
 
     private void primeImplicitPinch(MotionEvent event) {

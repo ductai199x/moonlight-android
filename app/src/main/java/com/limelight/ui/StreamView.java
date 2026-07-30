@@ -2,13 +2,18 @@ package com.limelight.ui;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.text.InputType;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
 import android.view.SurfaceView;
+import android.view.inputmethod.BaseInputConnection;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
 
 public class StreamView extends SurfaceView {
     private double desiredAspectRatio;
     private InputCallbacks inputCallbacks;
+    private TextInputCallbacks textInputCallbacks;
 
     public void setDesiredAspectRatio(double aspectRatio) {
         this.desiredAspectRatio = aspectRatio;
@@ -16,6 +21,10 @@ public class StreamView extends SurfaceView {
 
     public void setInputCallbacks(InputCallbacks callbacks) {
         this.inputCallbacks = callbacks;
+    }
+
+    public void setTextInputCallbacks(TextInputCallbacks callbacks) {
+        this.textInputCallbacks = callbacks;
     }
 
     public StreamView(Context context) {
@@ -78,8 +87,91 @@ public class StreamView extends SurfaceView {
         return super.onKeyPreIme(keyCode, event);
     }
 
+    @Override
+    public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
+        if (textInputCallbacks == null || !textInputCallbacks.isTextInputActive()) {
+            return super.onCreateInputConnection(outAttrs);
+        }
+
+        // Present a real text editor to the IME so composing input (swipe
+        // typing, autocorrect, voice dictation) works. The composed text is
+        // mirrored to the host as deltas by the connection below.
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT |
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE |
+                InputType.TYPE_TEXT_FLAG_AUTO_CORRECT;
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI |
+                EditorInfo.IME_FLAG_NO_FULLSCREEN |
+                EditorInfo.IME_ACTION_NONE;
+        return new StreamTextInputConnection(this);
+    }
+
+    private class StreamTextInputConnection extends BaseInputConnection {
+        private String composingText = "";
+
+        StreamTextInputConnection(StreamView targetView) {
+            super(targetView, true);
+        }
+
+        @Override
+        public boolean setComposingText(CharSequence text, int newCursorPosition) {
+            applyDelta(text.toString(), false);
+            return super.setComposingText(text, newCursorPosition);
+        }
+
+        @Override
+        public boolean commitText(CharSequence text, int newCursorPosition) {
+            applyDelta(text.toString(), true);
+            return super.commitText(text, newCursorPosition);
+        }
+
+        @Override
+        public boolean finishComposingText() {
+            composingText = "";
+            return super.finishComposingText();
+        }
+
+        @Override
+        public boolean deleteSurroundingText(int beforeLength, int afterLength) {
+            // IMEs replace composing text via setComposingText, so this only
+            // needs handling for deletions of already-committed text (e.g.
+            // tapping a suggestion to replace the previous word)
+            if (composingText.isEmpty() && beforeLength > 0) {
+                textInputCallbacks.onTextInputDelta(beforeLength, "");
+            }
+            return super.deleteSurroundingText(beforeLength, afterLength);
+        }
+
+        @Override
+        public boolean performEditorAction(int actionCode) {
+            textInputCallbacks.onTextInputEnter();
+            return true;
+        }
+
+        private void applyDelta(String newText, boolean committed) {
+            int prefix = 0;
+            while (prefix < composingText.length() && prefix < newText.length() &&
+                    composingText.charAt(prefix) == newText.charAt(prefix)) {
+                prefix++;
+            }
+
+            int deleteCount = composingText.length() - prefix;
+            String insertText = newText.substring(prefix);
+            if (deleteCount > 0 || !insertText.isEmpty()) {
+                textInputCallbacks.onTextInputDelta(deleteCount, insertText);
+            }
+
+            composingText = committed ? "" : newText;
+        }
+    }
+
     public interface InputCallbacks {
         boolean handleKeyUp(KeyEvent event);
         boolean handleKeyDown(KeyEvent event);
+    }
+
+    public interface TextInputCallbacks {
+        boolean isTextInputActive();
+        void onTextInputDelta(int deleteCount, String insertText);
+        void onTextInputEnter();
     }
 }

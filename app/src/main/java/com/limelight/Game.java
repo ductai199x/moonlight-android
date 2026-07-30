@@ -101,7 +101,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         OnGenericMotionListener, OnTouchListener, NvConnectionListener, EvdevListener,
         OnSystemUiVisibilityChangeListener, GameGestures, StreamView.InputCallbacks,
         PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener,
-        RelativeTouchContext.CursorMotionListener {
+        RelativeTouchContext.CursorMotionListener, StreamView.TextInputCallbacks {
     private int lastButtonState = 0;
 
     // Only 2 touches are supported
@@ -180,6 +180,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private View functionPad;
     private ImageButton modifierPadToggleButton;
     private boolean functionPadVisible = false;
+    private boolean textInputModeActive = false;
     private boolean lastImeVisible = false;
     private int lastImeHeight = 0;
 
@@ -276,6 +277,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         streamView.setOnGenericMotionListener(this);
         streamView.setOnKeyListener(this);
         streamView.setInputCallbacks(this);
+        streamView.setTextInputCallbacks(this);
 
         // Listen for touch events on the background touch view to enable trackpad mode
         // to work on areas outside of the StreamView itself. We use a separate View
@@ -440,6 +442,24 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             });
 
             setupModifierBar();
+
+            // Restore the remembered zoom and pan for this host once the
+            // stream view has been laid out
+            final String pcUuid = getIntent().getStringExtra(EXTRA_PC_UUID);
+            if (pcUuid != null) {
+                streamView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        SharedPreferences viewState = getSharedPreferences("desktop_view_state", MODE_PRIVATE);
+                        float scale = viewState.getFloat(pcUuid + "_scale", 1.0f);
+                        if (scale > 1.01f) {
+                            panZoomHandler.applyViewState(scale,
+                                    viewState.getFloat(pcUuid + "_cx", 0.5f),
+                                    viewState.getFloat(pcUuid + "_cy", 0.5f));
+                        }
+                    }
+                });
+            }
         }
 
         inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
@@ -1257,6 +1277,19 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     protected void onStop() {
         super.onStop();
 
+        // Remember the zoom and pan for this host
+        if (panZoomHandler != null) {
+            String pcUuid = getIntent().getStringExtra(EXTRA_PC_UUID);
+            if (pcUuid != null) {
+                float[] center = panZoomHandler.getViewportCenter();
+                getSharedPreferences("desktop_view_state", MODE_PRIVATE).edit()
+                        .putFloat(pcUuid + "_scale", panZoomHandler.getScaleFactor())
+                        .putFloat(pcUuid + "_cx", center[0])
+                        .putFloat(pcUuid + "_cy", center[1])
+                        .apply();
+            }
+        }
+
         SpinnerDialog.closeDialogs(this);
         Dialog.closeDialogs();
 
@@ -1672,19 +1705,46 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     private OnTouchListener createMouseButtonTouchListener(final byte mouseButton) {
         // Behaves like a physical mouse button: held while pressed, so drags
-        // are possible with the cursor moving on another finger
+        // are possible with the cursor moving on another finger. A quick
+        // double-tap latches the button down (drag lock) until tapped again.
         return new OnTouchListener() {
+            private boolean latched;
+            private boolean unlatching;
+            private long lastTapUpTime;
+
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
-                        v.setPressed(true);
-                        conn.sendMouseButtonDown(mouseButton);
+                        if (latched) {
+                            latched = false;
+                            unlatching = true;
+                            ((ImageButton) v).clearColorFilter();
+                            v.setPressed(false);
+                            conn.sendMouseButtonUp(mouseButton);
+                        }
+                        else {
+                            v.setPressed(true);
+                            conn.sendMouseButtonDown(mouseButton);
+                        }
                         return true;
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
-                        v.setPressed(false);
-                        conn.sendMouseButtonUp(mouseButton);
+                        if (unlatching) {
+                            unlatching = false;
+                        }
+                        else if (event.getActionMasked() == MotionEvent.ACTION_UP &&
+                                event.getEventTime() - lastTapUpTime < 300) {
+                            // Drag lock: keep the button held
+                            latched = true;
+                            v.setPressed(true);
+                            ((ImageButton) v).setColorFilter(UI_ACCENT_COLOR, PorterDuff.Mode.SRC_IN);
+                        }
+                        else {
+                            v.setPressed(false);
+                            conn.sendMouseButtonUp(mouseButton);
+                            lastTapUpTime = event.getEventTime();
+                        }
                         return true;
                     default:
                         return false;
@@ -1764,6 +1824,23 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 KeyboardPacket.MODIFIER_CTRL, KeyEvent.KEYCODE_CTRL_LEFT);
         setupStickyModifierButton(findViewById(R.id.modifierAltButton),
                 KeyboardPacket.MODIFIER_ALT, KeyEvent.KEYCODE_ALT_LEFT);
+
+        final Button textModeButton = findViewById(R.id.modifierTextModeButton);
+        textModeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                textInputModeActive = !textInputModeActive;
+                textModeButton.setTextColor(textInputModeActive ? UI_ACCENT_COLOR : 0xFFEEEEEE);
+
+                // Make the IME re-query the input connection type
+                InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                inputManager.restartInput(streamView);
+
+                Toast.makeText(Game.this, textInputModeActive ?
+                        getResources().getString(R.string.text_mode_on) :
+                        getResources().getString(R.string.text_mode_off), Toast.LENGTH_SHORT).show();
+            }
+        });
 
         findViewById(R.id.modifierCapsButton).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1891,6 +1968,30 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         functionPad.setTranslationY(functionPadVisible ? bottomInset : 0);
     }
 
+    @Override
+    public boolean isTextInputActive() {
+        return textInputModeActive;
+    }
+
+    @Override
+    public void onTextInputDelta(int deleteCount, String insertText) {
+        short backspace = keyboardTranslator.translate(KeyEvent.KEYCODE_DEL, -1);
+        for (int i = 0; i < deleteCount; i++) {
+            conn.sendKeyboardInput(backspace, KeyboardPacket.KEY_DOWN, getModifierState(), (byte) 0);
+            conn.sendKeyboardInput(backspace, KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+        }
+        if (!insertText.isEmpty()) {
+            conn.sendUtf8Text(insertText);
+        }
+    }
+
+    @Override
+    public void onTextInputEnter() {
+        short enter = keyboardTranslator.translate(KeyEvent.KEYCODE_ENTER, -1);
+        conn.sendKeyboardInput(enter, KeyboardPacket.KEY_DOWN, getModifierState(), (byte) 0);
+        conn.sendKeyboardInput(enter, KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
+    }
+
     private void sendFunctionKeys(int[] androidKeyCodes) {
         short[] translated = new short[androidKeyCodes.length];
         for (int i = 0; i < androidKeyCodes.length; i++) {
@@ -1945,6 +2046,23 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         wireFunctionKey(R.id.funcDown, KeyEvent.KEYCODE_DPAD_DOWN);
         wireFunctionKey(R.id.funcLeft, KeyEvent.KEYCODE_DPAD_LEFT);
         wireFunctionKey(R.id.funcRight, KeyEvent.KEYCODE_DPAD_RIGHT);
+
+        findViewById(R.id.funcPaste).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Backup path for when clipboard sync between devices is broken:
+                // type the phone's clipboard into the host
+                android.content.ClipboardManager clipboard =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null && clipboard.hasPrimaryClip() &&
+                        clipboard.getPrimaryClip().getItemCount() > 0) {
+                    CharSequence text = clipboard.getPrimaryClip().getItemAt(0).coerceToText(Game.this);
+                    if (text != null && text.length() > 0) {
+                        conn.sendUtf8Text(text.toString());
+                    }
+                }
+            }
+        });
 
         findViewById(R.id.funcRotate).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -2571,6 +2689,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 if (panZoomHandler != null) {
                     switch (panZoomHandler.filterImplicitGesture(event)) {
                         case StreamPanZoomHandler.IMPLICIT_CLAIM_STARTED:
+                        case StreamPanZoomHandler.IMPLICIT_SMART_ZOOM:
                             for (TouchContext aTouchContext : touchContextMap) {
                                 aTouchContext.cancelTouch();
                             }

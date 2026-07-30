@@ -104,6 +104,7 @@ public class RelativeTouchContext implements TouchContext {
     private static final float DESKTOP_CURSOR_SPEED_FACTOR = 0.4f;
 
     private float cursorSpeedCarryX, cursorSpeedCarryY;
+    private Runnable pendingClickRunnable;
 
     public RelativeTouchContext(NvConnection conn, int actionIndex,
                                 int referenceWidth, int referenceHeight,
@@ -205,15 +206,33 @@ public class RelativeTouchContext implements TouchContext {
         }
         else if (isTap(eventTime))
         {
-            // Lower the mouse button
-            conn.sendMouseButtonDown(buttonIndex);
-
-            // Release the mouse button in 100ms to allow for apps that use polling
-            // to detect mouse button presses.
-            Runnable buttonUpRunnable = buttonUpRunnables[buttonIndex - 1];
-            handler.removeCallbacks(buttonUpRunnable);
-            handler.postDelayed(buttonUpRunnable, 100);
+            if (buttonIndex == MouseButtonPacket.BUTTON_RIGHT && prefConfig.enablePanZoom) {
+                // Delay two-finger right clicks briefly so a second two-finger
+                // tap can become a smart zoom instead (cancelled in cancelTouch)
+                pendingClickRunnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        pendingClickRunnable = null;
+                        sendTapClick(MouseButtonPacket.BUTTON_RIGHT);
+                    }
+                };
+                handler.postDelayed(pendingClickRunnable, 350);
+            }
+            else {
+                sendTapClick(buttonIndex);
+            }
         }
+    }
+
+    private void sendTapClick(byte buttonIndex) {
+        // Lower the mouse button
+        conn.sendMouseButtonDown(buttonIndex);
+
+        // Release the mouse button in 100ms to allow for apps that use polling
+        // to detect mouse button presses.
+        Runnable buttonUpRunnable = buttonUpRunnables[buttonIndex - 1];
+        handler.removeCallbacks(buttonUpRunnable);
+        handler.postDelayed(buttonUpRunnable, 100);
     }
 
     private void startDragTimer() {
@@ -357,6 +376,12 @@ public class RelativeTouchContext implements TouchContext {
 
         // Cancel the drag timer
         cancelDragTimer();
+
+        // Cancel any delayed right click that hasn't fired yet
+        if (pendingClickRunnable != null) {
+            handler.removeCallbacks(pendingClickRunnable);
+            pendingClickRunnable = null;
+        }
 
         // If it was a confirmed drag, we'll need to raise the button now
         if (confirmedDrag) {
