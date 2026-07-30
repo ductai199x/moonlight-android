@@ -100,6 +100,11 @@ public class RelativeTouchContext implements TouchContext {
 
     private static final int SCROLL_SPEED_FACTOR = 5;
 
+    // Cursor speed multiplier while the desktop zoom/pan preference is active
+    private static final float DESKTOP_CURSOR_SPEED_FACTOR = 0.4f;
+
+    private float cursorSpeedCarryX, cursorSpeedCarryY;
+
     public RelativeTouchContext(NvConnection conn, int actionIndex,
                                 int referenceWidth, int referenceHeight,
                                 View view, PreferenceConfiguration prefConfig,
@@ -171,6 +176,7 @@ public class RelativeTouchContext implements TouchContext {
             originalTouchTime = eventTime;
             cancelled = confirmedDrag = confirmedMove = confirmedScroll = false;
             distanceMoved = 0;
+            cursorSpeedCarryX = cursorSpeedCarryY = 0;
 
             if (actionIndex == 0) {
                 // Start the timer for engaging a drag
@@ -277,11 +283,27 @@ public class RelativeTouchContext implements TouchContext {
                     deltaY = -deltaY;
                 }
 
+                // The pre-scaling deltas decide whether lastTouch advances, so
+                // the sub-pixel carry below never double-counts movement
+                int rawDeltaX = deltaX;
+                int rawDeltaY = deltaY;
+
                 if (pointerCount == 2) {
                     if (confirmedScroll) {
                         conn.sendMouseHighResScroll((short)(deltaY * SCROLL_SPEED_FACTOR));
                     }
                 } else {
+                    // Slow the cursor down for finer control in desktop mode,
+                    // carrying sub-pixel remainders so slow motion isn't lost
+                    if (prefConfig.enablePanZoom) {
+                        float scaledX = deltaX * DESKTOP_CURSOR_SPEED_FACTOR + cursorSpeedCarryX;
+                        float scaledY = deltaY * DESKTOP_CURSOR_SPEED_FACTOR + cursorSpeedCarryY;
+                        deltaX = (int) scaledX;
+                        deltaY = (int) scaledY;
+                        cursorSpeedCarryX = scaledX - deltaX;
+                        cursorSpeedCarryY = scaledY - deltaY;
+                    }
+
                     if (prefConfig.absoluteMouseMode) {
                         conn.sendMouseMoveAsMousePosition(
                                 (short) deltaX,
@@ -309,10 +331,10 @@ public class RelativeTouchContext implements TouchContext {
                 // If the scaling factor ended up rounding deltas to zero, wait until they are
                 // non-zero to update lastTouch that way devices that report small touch events often
                 // will work correctly
-                if (deltaX != 0) {
+                if (rawDeltaX != 0) {
                     lastTouchX = eventX;
                 }
-                if (deltaY != 0) {
+                if (rawDeltaY != 0) {
                     lastTouchY = eventY;
                 }
             }
