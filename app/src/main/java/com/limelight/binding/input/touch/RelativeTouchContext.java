@@ -100,8 +100,10 @@ public class RelativeTouchContext implements TouchContext {
 
     private static final int SCROLL_SPEED_FACTOR = 5;
 
-    // Cursor speed multiplier while the desktop zoom/pan preference is active
+    // Cursor and scroll speed multipliers while the desktop zoom/pan
+    // preference is active
     private static final float DESKTOP_CURSOR_SPEED_FACTOR = 0.4f;
+    private static final float DESKTOP_SCROLL_SPEED_FACTOR = 0.67f;
 
     private float cursorSpeedCarryX, cursorSpeedCarryY;
     private Runnable pendingClickRunnable;
@@ -310,6 +312,10 @@ public class RelativeTouchContext implements TouchContext {
                 if (pointerCount == 2) {
                     if (confirmedScroll) {
                         int scrollDelta = deltaY * SCROLL_SPEED_FACTOR;
+                        if (prefConfig.enablePanZoom) {
+                            // Slow scrolling down for finer control in desktop mode
+                            scrollDelta = (int) (scrollDelta * DESKTOP_SCROLL_SPEED_FACTOR);
+                        }
                         if (prefConfig.invertScrollDirection) {
                             scrollDelta = -scrollDelta;
                         }

@@ -74,6 +74,9 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD = 100;
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
+    // Scroll speed multiplier while the desktop zoom/pan preference is active
+    private static final float DESKTOP_SCROLL_SPEED_FACTOR = 0.67f;
+
     public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view,
                                 PreferenceConfiguration prefConfig,
                                 CursorPositionListener cursorPositionListener)
@@ -227,6 +230,10 @@ public class AbsoluteTouchContext implements TouchContext {
         }
         else if (actionIndex == 1) {
             int scrollDelta = (eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR;
+            if (prefConfig.enablePanZoom) {
+                // Slow scrolling down for finer control in desktop mode
+                scrollDelta = (int) (scrollDelta * DESKTOP_SCROLL_SPEED_FACTOR);
+            }
             if (prefConfig.invertScrollDirection) {
                 scrollDelta = -scrollDelta;
             }

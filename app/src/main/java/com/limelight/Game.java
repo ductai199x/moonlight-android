@@ -432,7 +432,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             lastScrollStripY = event.getY();
                             return true;
                         case MotionEvent.ACTION_MOVE:
-                            int scrollDelta = (int)((event.getY() - lastScrollStripY) * SCROLL_STRIP_SPEED_FACTOR);
+                            // The strip only exists in desktop mode, so the
+                            // desktop scroll slowdown is baked into the factor
+                            int scrollDelta = (int)((event.getY() - lastScrollStripY) * SCROLL_STRIP_SPEED_FACTOR * 0.67f);
                             if (prefConfig.invertScrollDirection) {
                                 scrollDelta = -scrollDelta;
                             }
