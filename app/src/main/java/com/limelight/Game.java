@@ -171,6 +171,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private View quickMenu;
     private ImageButton quickMenuZoomButton;
     private ImageButton quickMenuCursorModeButton;
+    private float prePipScale = 1.0f;
+    private float[] prePipCenter;
     private View mouseButtonBar;
     private View scrollStrip;
     private float lastScrollStripY;
@@ -333,6 +335,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             // the overlay at runtime, but start with it hidden
             prefConfig.enablePerfOverlay = true;
             statsOverlayVisible = false;
+
+            // Keep the session running in a PiP window when switching apps
+            // instead of disconnecting. In-memory only.
+            prefConfig.enablePip = true;
 
             quickMenuHandle.setVisibility(View.VISIBLE);
             findViewById(R.id.quickMenuHandleChevron).setOnClickListener(new View.OnClickListener() {
@@ -793,8 +799,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     updateBottomChrome();
                 }
 
-                // Show the whole stream in the PiP window
+                // Show the whole stream in the PiP window, remembering the
+                // zoom and pan so they can be restored on the way back
                 if (panZoomHandler != null) {
+                    prePipScale = panZoomHandler.getScaleFactor();
+                    prePipCenter = panZoomHandler.getViewportCenter();
                     panZoomHandler.reset();
                 }
 
@@ -821,6 +830,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     quickMenuHandle.setVisibility(View.VISIBLE);
                     mouseButtonBar.setVisibility(View.VISIBLE);
                     scrollStrip.setVisibility(View.VISIBLE);
+
+                    // Restore the zoom and pan from before PiP
+                    if (panZoomHandler != null && prePipScale > 1.01f && prePipCenter != null) {
+                        panZoomHandler.applyViewState(prePipScale, prePipCenter[0], prePipCenter[1]);
+                        prePipScale = 1.0f;
+                    }
                 }
 
                 notificationOverlayView.setVisibility(requestedNotificationOverlayVisibility);
