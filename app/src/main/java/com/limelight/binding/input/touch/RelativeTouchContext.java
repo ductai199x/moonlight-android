@@ -103,7 +103,7 @@ public class RelativeTouchContext implements TouchContext {
     // Cursor and scroll speed multipliers while the desktop zoom/pan
     // preference is active
     private static final float DESKTOP_CURSOR_SPEED_FACTOR = 0.4f;
-    private static final float DESKTOP_SCROLL_SPEED_FACTOR = 0.67f;
+    private static final float DESKTOP_SCROLL_SPEED_FACTOR = 0.57f;
 
     private float cursorSpeedCarryX, cursorSpeedCarryY;
     private Runnable pendingClickRunnable;

@@ -75,7 +75,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
     // Scroll speed multiplier while the desktop zoom/pan preference is active
-    private static final float DESKTOP_SCROLL_SPEED_FACTOR = 0.67f;
+    private static final float DESKTOP_SCROLL_SPEED_FACTOR = 0.57f;
 
     public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view,
                                 PreferenceConfiguration prefConfig,
