@@ -2,6 +2,7 @@ package com.limelight.binding.input.touch;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 
 import com.limelight.nvstream.NvConnection;
@@ -50,6 +51,15 @@ public class RelativeTouchContext implements TouchContext {
 
             // The drag should only be processed for the primary finger
             if (actionIndex != maxPointerCountInGesture - 1) {
+                return;
+            }
+
+            if (prefConfig.enablePanZoom) {
+                // In desktop mode, pressing and holding in place means a right
+                // click, sent on release so the context menu appears where the
+                // finger lifts
+                confirmedHoldRightClick = true;
+                targetView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 return;
             }
 
@@ -107,6 +117,10 @@ public class RelativeTouchContext implements TouchContext {
 
     private float cursorSpeedCarryX, cursorSpeedCarryY;
     private Runnable pendingClickRunnable;
+    private boolean confirmedHoldRightClick;
+    private long lastLeftTapTime;
+
+    private static final int DOUBLE_TAP_DRAG_TIME_THRESHOLD = 300;
 
     public RelativeTouchContext(NvConnection conn, int actionIndex,
                                 int referenceWidth, int referenceHeight,
@@ -178,12 +192,25 @@ public class RelativeTouchContext implements TouchContext {
             maxPointerCountInGesture = pointerCount;
             originalTouchTime = eventTime;
             cancelled = confirmedDrag = confirmedMove = confirmedScroll = false;
+            confirmedHoldRightClick = false;
             distanceMoved = 0;
             cursorSpeedCarryX = cursorSpeedCarryY = 0;
 
             if (actionIndex == 0) {
-                // Start the timer for engaging a drag
-                startDragTimer();
+                if (prefConfig.enablePanZoom && pointerCount == 1 &&
+                        eventTime - lastLeftTapTime < DOUBLE_TAP_DRAG_TIME_THRESHOLD) {
+                    // Tap then press again quickly: hold the left button down so
+                    // moving the cursor drags or selects. A quick release without
+                    // movement still registers as the second click of a double
+                    // click.
+                    handler.removeCallbacks(buttonUpRunnables[MouseButtonPacket.BUTTON_LEFT - 1]);
+                    conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
+                    confirmedDrag = true;
+                }
+                else {
+                    // Start the timer for engaging a drag
+                    startDragTimer();
+                }
             }
         }
 
@@ -206,6 +233,13 @@ public class RelativeTouchContext implements TouchContext {
             // Raise the button after a drag
             conn.sendMouseButtonUp(buttonIndex);
         }
+        else if (confirmedHoldRightClick) {
+            if (!confirmedMove) {
+                // Send the right click now that the finger has lifted, so the
+                // context menu opens under the cursor
+                sendTapClick(MouseButtonPacket.BUTTON_RIGHT);
+            }
+        }
         else if (isTap(eventTime))
         {
             if (buttonIndex == MouseButtonPacket.BUTTON_RIGHT && prefConfig.enablePanZoom) {
@@ -222,6 +256,11 @@ public class RelativeTouchContext implements TouchContext {
             }
             else {
                 sendTapClick(buttonIndex);
+
+                if (buttonIndex == MouseButtonPacket.BUTTON_LEFT) {
+                    // Remembered so a quick second press can become a drag
+                    lastLeftTapTime = eventTime;
+                }
             }
         }
     }
