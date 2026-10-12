@@ -1903,11 +1903,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
         });
 
-        findViewById(R.id.modifierCapsButton).setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.modifierTabButton).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Caps Lock toggles host state with a press, rather than being held
-                short translated = keyboardTranslator.translate(KeyEvent.KEYCODE_CAPS_LOCK, -1);
+                // Sent with the current modifier state, so the sticky modifiers
+                // give Shift+Tab, Ctrl+Tab and Alt+Tab
+                short translated = keyboardTranslator.translate(KeyEvent.KEYCODE_TAB, -1);
                 conn.sendKeyboardInput(translated, KeyboardPacket.KEY_DOWN, getModifierState(), (byte) 0);
                 conn.sendKeyboardInput(translated, KeyboardPacket.KEY_UP, getModifierState(), (byte) 0);
             }
@@ -2094,6 +2095,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         wireFunctionKey(R.id.funcEnd, KeyEvent.KEYCODE_MOVE_END);
         wireFunctionKey(R.id.funcPgDn, KeyEvent.KEYCODE_PAGE_DOWN);
         wireFunctionKey(R.id.funcIns, KeyEvent.KEYCODE_INSERT);
+        wireFunctionKey(R.id.funcEnter, KeyEvent.KEYCODE_ENTER);
 
         wireFunctionKey(R.id.funcCtrlZ, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_Z);
         wireFunctionKey(R.id.funcWinD, KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_D);

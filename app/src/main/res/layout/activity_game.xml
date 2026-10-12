@@ -277,7 +277,7 @@
             android:background="@android:color/transparent" />
 
         <Button
-            android:id="@+id/modifierCapsButton"
+            android:id="@+id/modifierTabButton"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
             android:minWidth="0dp"
@@ -285,7 +285,7 @@
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
             android:focusable="false"
-            android:text="@string/modifier_caps"
+            android:text="@string/modifier_tab"
             android:textSize="16sp"
             android:textAllCaps="false"
             android:textColor="#EEEEEE"
@@ -373,7 +373,7 @@
             <Button style="@style/FunctionPadKey" android:id="@+id/funcF12" android:text="F12" />
             <Button style="@style/FunctionPadKey" android:id="@+id/funcIns" android:text="Ins" />
             <Button style="@style/FunctionPadKey" android:id="@+id/funcPaste" android:text="Paste" />
-            <View style="@style/FunctionPadSpacer" />
+            <Button style="@style/FunctionPadKey" android:id="@+id/funcEnter" android:text="Enter" />
             <View style="@style/FunctionPadSpacer" />
         </LinearLayout>
 
