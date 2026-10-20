@@ -178,6 +178,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private float lastScrollStripY;
     private View modifierBar;
     private boolean statsOverlayVisible = false;
+    private boolean privacyScreenRequested = false;
     private boolean modifierBarShowing = false;
     private int stickyModifiers = 0;
     private View functionPad;
@@ -411,6 +412,24 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     else {
                         ((ImageButton) v).clearColorFilter();
                     }
+                }
+            });
+            findViewById(R.id.quickMenuPrivacyButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    // The host-side PrivacyScreen helper toggles on this hotkey. Its
+                    // real state can't be read back, so the tint tracks our toggles
+                    // (the helper also shows a green dot in the stream while active).
+                    sendFunctionKeys(new int[] { KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_ALT_LEFT,
+                            KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_P });
+                    privacyScreenRequested = !privacyScreenRequested;
+                    if (privacyScreenRequested) {
+                        ((ImageButton) v).setColorFilter(UI_ACCENT_COLOR, PorterDuff.Mode.SRC_IN);
+                    }
+                    else {
+                        ((ImageButton) v).clearColorFilter();
+                    }
+                    Toast.makeText(Game.this, R.string.privacy_screen_sent, Toast.LENGTH_SHORT).show();
                 }
             });
             updateCursorModeButton();

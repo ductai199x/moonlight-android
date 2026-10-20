@@ -63,12 +63,16 @@ The app installs alongside the official Moonlight app (package `com.limelight.un
 ### On-screen controls
 
 - **Handle (right edge):** the arrow opens the quick menu. The keyboard icon shows or hides the soft keyboard.
-- **Quick menu:** navigation mode (one-finger pan, with no input sent to the host), keyboard, touchscreen mode, resolution and frame rate, scroll direction, performance stats, and disconnect.
+- **Quick menu:** navigation mode (one-finger pan, with no input sent to the host), keyboard, touchscreen mode, resolution and frame rate, scroll direction, performance stats, privacy screen (see below), and disconnect.
 - **Mouse buttons (bottom):** press and hold to hold the button. Double-tap a button to lock it down, and tap again to release it.
 - **Scroll strip (right edge):** drag to scroll.
 - **Modifier bar (above the keyboard):** Win, Shift, Ctrl, and Alt stay pressed until you tap them again. Tab uses the active modifiers, for example Alt+Tab. **Aa** turns on text input mode. The gear opens the quick menu. The last button switches between the soft keyboard and the function key pad.
 
 To end a session, use the power button in the quick menu or close the picture-in-picture window.
+
+## Privacy screen
+
+The eye button in the quick menu blanks the host computer's physical monitors while you stream, so nobody near the host can see your session. The stream itself is unaffected. This needs a small helper running on each Windows host, which is in [tools/privacy-screen](tools/privacy-screen) (build, run once, and it stays in the tray). The button sends the helper's hotkey, Ctrl+Alt+Shift+P. A green dot at the top right of the primary monitor, visible in the stream, shows that it is on.
 
 ## Building
 

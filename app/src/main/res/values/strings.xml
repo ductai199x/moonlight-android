@@ -212,6 +212,8 @@
     <string name="quick_menu_quality_description">Change stream resolution</string>
     <string name="quick_menu_scroll_dir_description">Toggle scroll direction</string>
     <string name="quick_menu_stats_description">Toggle performance stats</string>
+    <string name="quick_menu_privacy_description">Toggle privacy screen on the host</string>
+    <string name="privacy_screen_sent">Privacy screen toggled (requires the PrivacyScreen helper on the host)</string>
     <string name="scroll_dir_inverted">Scroll direction: inverted</string>
     <string name="scroll_dir_natural">Scroll direction: natural</string>
     <string name="cursor_mode_trackpad">Touchscreen is a trackpad</string>
