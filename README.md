@@ -72,7 +72,7 @@ To end a session, use the power button in the quick menu or close the picture-in
 
 ## Privacy screen
 
-The eye button in the quick menu blanks the host computer's physical monitors while you stream, so nobody near the host can see your session. The stream itself is unaffected. This needs a small helper running on each Windows host, which is in [tools/privacy-screen](tools/privacy-screen) (build, run once, and it stays in the tray). The button sends the helper's hotkey, Ctrl+Alt+Shift+P. A green dot at the top right of the primary monitor, visible in the stream, shows that it is on.
+The eye button in the quick menu blanks the host computer's physical monitors while you stream, so nobody near the host can see your session. The stream itself is unaffected. This needs a small helper running on each Windows host, which is in [tools/privacy-screen](tools/privacy-screen) (build, run once, and it stays in the tray). The button sends the helper's hotkey, Ctrl+Alt+Shift+P. A green dot at the top right of the primary monitor, visible in the stream, shows that it is on. Linux hosts running X11 are supported through a separate helper in [tools/privacy-screen-linux](tools/privacy-screen-linux); Wayland is not supported.
 
 ## Building
 

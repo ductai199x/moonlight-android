@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+"""Privacy screen for Linux (X11): blanks every physical monitor while a remote
+session (Sunshine/Moonlight, VNC, ...) keeps seeing the real desktop.
+
+It sets each output's gamma ramp to black with `xrandr --brightness 0`. The
+ramp is applied after the framebuffer, so screen capture is unaffected.
+
+Run `privacy-screen` once per login to get a tray icon (click to toggle,
+right-click for the menu). Control a running instance with:
+
+    privacy-screen --on | --off | --toggle | --status | --quit
+    privacy-screen --on --for 30        switch on, then off after 30 seconds
+
+Bind --toggle to Ctrl+Alt+Shift+P in the desktop's keyboard settings to match
+the Moonlight quick menu button.
+
+Needs: python3 with PyGObject (Gio/GLib) and xrandr. No other packages: the
+tray icon is registered directly over D-Bus (StatusNotifierItem), which GNOME
+(AppIndicator extension, enabled by default on Ubuntu), KDE and XFCE show.
+Wayland sessions are refused: compositors there don't allow gamma changes.
+"""
+import os
+import signal
+import subprocess
+import sys
+
+from gi.repository import Gio, GLib
+
+BUS_NAME = "org.privacyscreen.Helper"
+OBJ_PATH = "/org/privacyscreen/Helper"
+SNI_PATH = "/StatusNotifierItem"
+MENU_PATH = "/MenuBar"
+REAPPLY_SECONDS = 2
+
+CONTROL_XML = """
+<node><interface name="org.privacyscreen.Helper">
+  <method name="On"/><method name="Off"/><method name="Toggle"/>
+  <method name="OnFor"><arg type="i" name="seconds" direction="in"/></method>
+  <method name="Quit"/>
+  <method name="GetState"><arg type="b" name="active" direction="out"/></method>
+</interface></node>"""
+
+SNI_XML = """
+<node><interface name="org.kde.StatusNotifierItem">
+  <method name="Activate"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
+  <method name="SecondaryActivate"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
+  <method name="ContextMenu"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
+  <method name="Scroll"><arg type="i" direction="in"/><arg type="s" direction="in"/></method>
+  <signal name="NewIcon"/><signal name="NewToolTip"/><signal name="NewStatus"><arg type="s"/></signal>
+  <property name="Category" type="s" access="read"/>
+  <property name="Id" type="s" access="read"/>
+  <property name="Title" type="s" access="read"/>
+  <property name="Status" type="s" access="read"/>
+  <property name="WindowId" type="u" access="read"/>
+  <property name="IconName" type="s" access="read"/>
+  <property name="IconPixmap" type="a(iiay)" access="read"/>
+  <property name="OverlayIconName" type="s" access="read"/>
+  <property name="AttentionIconName" type="s" access="read"/>
+  <property name="ToolTip" type="(sa(iiay)ss)" access="read"/>
+  <property name="ItemIsMenu" type="b" access="read"/>
+  <property name="Menu" type="o" access="read"/>
+</interface></node>"""
+
+MENU_XML = """
+<node><interface name="com.canonical.dbusmenu">
+  <method name="GetLayout"><arg type="i" direction="in"/><arg type="i" direction="in"/><arg type="as" direction="in"/>
+    <arg type="u" direction="out"/><arg type="(ia{sv}av)" direction="out"/></method>
+  <method name="GetGroupProperties"><arg type="ai" direction="in"/><arg type="as" direction="in"/>
+    <arg type="a(ia{sv})" direction="out"/></method>
+  <method name="GetProperty"><arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="out"/></method>
+  <method name="Event"><arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="in"/><arg type="u" direction="in"/></method>
+  <method name="EventGroup"><arg type="a(isvu)" direction="in"/><arg type="ai" direction="out"/></method>
+  <method name="AboutToShow"><arg type="i" direction="in"/><arg type="b" direction="out"/></method>
+  <method name="AboutToShowGroup"><arg type="ai" direction="in"/><arg type="ai" direction="out"/><arg type="ai" direction="out"/></method>
+  <signal name="ItemsPropertiesUpdated"><arg type="a(ia{sv})"/><arg type="a(ias)"/></signal>
+  <signal name="LayoutUpdated"><arg type="u"/><arg type="i"/></signal>
+  <signal name="ItemActivationRequested"><arg type="i"/><arg type="u"/></signal>
+  <property name="Version" type="u" access="read"/>
+  <property name="TextDirection" type="s" access="read"/>
+  <property name="Status" type="s" access="read"/>
+  <property name="IconThemePaths" type="as" access="read"/>
+</interface></node>"""
+
+ID_TOGGLE, ID_QUIT, ID_SEPARATOR = 1, 3, 2
+
+
+def xrandr(*args):
+    return subprocess.run(["xrandr", *args], capture_output=True, text=True)
+
+
+def connected_outputs():
+    names = []
+    for line in xrandr("--query").stdout.splitlines():
+        parts = line.split()
+        if len(parts) > 1 and parts[1] == "connected":
+            names.append(parts[0])
+    return names
+
+
+def set_brightness(value):
+    args = []
+    for name in connected_outputs():
+        args += ["--output", name, "--brightness", str(value)]
+    if args:
+        xrandr(*args)
+
+
+class Helper:
+    def __init__(self, loop):
+        self.loop = loop
+        self.active = False
+        self.reapply_id = None
+        self.off_id = None
+        self.revision = 1
+        self.conn = None
+
+    # --- blanking -------------------------------------------------------
+    def set_active(self, on):
+        if on == self.active:
+            return
+        self.active = on
+        if self.off_id:
+            GLib.source_remove(self.off_id)
+            self.off_id = None
+        if on:
+            set_brightness(0)
+            self.reapply_id = GLib.timeout_add_seconds(REAPPLY_SECONDS, self._reapply)
+        else:
+            if self.reapply_id:
+                GLib.source_remove(self.reapply_id)
+                self.reapply_id = None
+            set_brightness(1)
+        self._state_changed()
+
+    def _reapply(self):
+        # Other tools (night light, colour profiles) can reset the ramp, and
+        # monitors can be hot-plugged
+        set_brightness(0)
+        return True
+
+    def on_for(self, seconds):
+        self.set_active(True)
+        if seconds > 0:
+            self.off_id = GLib.timeout_add_seconds(seconds, self._auto_off)
+
+    def _auto_off(self):
+        self.off_id = None
+        self.set_active(False)
+        return False
+
+    def quit(self):
+        self.set_active(False)
+        self.loop.quit()
+
+    # --- D-Bus plumbing -------------------------------------------------
+    def start(self, conn):
+        self.conn = conn
+        Gio.bus_own_name_on_connection(conn, BUS_NAME, Gio.BusNameOwnerFlags.NONE, None, None)
+        conn.register_object(OBJ_PATH, Gio.DBusNodeInfo.new_for_xml(CONTROL_XML).interfaces[0],
+                             self._control_call, None, None)
+        conn.register_object(SNI_PATH, Gio.DBusNodeInfo.new_for_xml(SNI_XML).interfaces[0],
+                             self._sni_call, self._sni_get, None)
+        conn.register_object(MENU_PATH, Gio.DBusNodeInfo.new_for_xml(MENU_XML).interfaces[0],
+                             self._menu_call, self._menu_get, None)
+
+        self.sni_name = "org.kde.StatusNotifierItem-%d-1" % os.getpid()
+        Gio.bus_own_name_on_connection(conn, self.sni_name, Gio.BusNameOwnerFlags.NONE, None, None)
+        Gio.bus_watch_name_on_connection(conn, "org.kde.StatusNotifierWatcher",
+                                         Gio.BusNameWatcherFlags.NONE, self._watcher_appeared, None)
+
+    def _watcher_appeared(self, conn, name, owner):
+        conn.call("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+                  "org.kde.StatusNotifierWatcher", "RegisterStatusNotifierItem",
+                  GLib.Variant("(s)", (self.sni_name,)), None, Gio.DBusCallFlags.NONE, -1, None, None)
+
+    def _emit(self, path, iface, signal, params=None):
+        self.conn.emit_signal(None, path, iface, signal, params)
+
+    def _state_changed(self):
+        if not self.conn:
+            return
+        self.revision += 1
+        self._emit(SNI_PATH, "org.kde.StatusNotifierItem", "NewIcon")
+        self._emit(SNI_PATH, "org.kde.StatusNotifierItem", "NewToolTip")
+        self._emit(MENU_PATH, "com.canonical.dbusmenu", "LayoutUpdated",
+                   GLib.Variant("(ui)", (self.revision, 0)))
+
+    def _control_call(self, conn, sender, path, iface, method, params, inv):
+        if method == "On":
+            self.set_active(True)
+        elif method == "Off":
+            self.set_active(False)
+        elif method == "Toggle":
+            self.set_active(not self.active)
+        elif method == "OnFor":
+            self.on_for(params.unpack()[0])
+        elif method == "Quit":
+            inv.return_value(None)
+            GLib.idle_add(self.quit)
+            return
+        elif method == "GetState":
+            inv.return_value(GLib.Variant("(b)", (self.active,)))
+            return
+        inv.return_value(None)
+
+    # --- tray icon ------------------------------------------------------
+    def _sni_get(self, conn, sender, path, iface, prop):
+        title = "Privacy screen: %s" % ("ON" if self.active else "off")
+        values = {
+            "Category": GLib.Variant("s", "ApplicationStatus"),
+            "Id": GLib.Variant("s", "privacy-screen"),
+            "Title": GLib.Variant("s", "Privacy screen"),
+            "Status": GLib.Variant("s", "Active"),
+            "WindowId": GLib.Variant("u", 0),
+            "IconName": GLib.Variant("s", "view-conceal-symbolic" if self.active else "view-reveal-symbolic"),
+            "IconPixmap": GLib.Variant("a(iiay)", []),
+            "OverlayIconName": GLib.Variant("s", ""),
+            "AttentionIconName": GLib.Variant("s", ""),
+            "ToolTip": GLib.Variant("(sa(iiay)ss)", ("", [], title, "Click to toggle")),
+            "ItemIsMenu": GLib.Variant("b", False),
+            "Menu": GLib.Variant("o", MENU_PATH),
+        }
+        return values.get(prop)
+
+    def _sni_call(self, conn, sender, path, iface, method, params, inv):
+        if method in ("Activate", "SecondaryActivate"):
+            self.set_active(not self.active)
+        inv.return_value(None)
+
+    # --- tray menu (dbusmenu) -------------------------------------------
+    def _item_props(self, item_id):
+        if item_id == ID_TOGGLE:
+            return {"label": GLib.Variant("s", "Privacy screen"),
+                    "toggle-type": GLib.Variant("s", "checkmark"),
+                    "toggle-state": GLib.Variant("i", 1 if self.active else 0),
+                    "enabled": GLib.Variant("b", True), "visible": GLib.Variant("b", True)}
+        if item_id == ID_SEPARATOR:
+            return {"type": GLib.Variant("s", "separator"), "visible": GLib.Variant("b", True)}
+        if item_id == ID_QUIT:
+            return {"label": GLib.Variant("s", "Quit"),
+                    "enabled": GLib.Variant("b", True), "visible": GLib.Variant("b", True)}
+        return {"children-display": GLib.Variant("s", "submenu")}
+
+    def _layout(self):
+        children = [GLib.Variant("(ia{sv}av)", (i, self._item_props(i), []))
+                    for i in (ID_TOGGLE, ID_SEPARATOR, ID_QUIT)]
+        return (0, self._item_props(0), children)
+
+    def _menu_call(self, conn, sender, path, iface, method, params, inv):
+        if method == "GetLayout":
+            inv.return_value(GLib.Variant("(u(ia{sv}av))", (self.revision, self._layout())))
+        elif method == "GetGroupProperties":
+            ids = params.unpack()[0] or [ID_TOGGLE, ID_SEPARATOR, ID_QUIT]
+            inv.return_value(GLib.Variant("(a(ia{sv}))", ([(i, self._item_props(i)) for i in ids],)))
+        elif method == "GetProperty":
+            item_id, name = params.unpack()
+            inv.return_value(GLib.Variant("(v)", (self._item_props(item_id).get(name, GLib.Variant("s", "")),)))
+        elif method == "Event":
+            item_id, event = params.unpack()[0:2]
+            if event == "clicked":
+                self._clicked(item_id)
+            inv.return_value(None)
+        elif method == "EventGroup":
+            for item_id, event, _data, _ts in params.unpack()[0]:
+                if event == "clicked":
+                    self._clicked(item_id)
+            inv.return_value(GLib.Variant("(ai)", ([],)))
+        elif method == "AboutToShow":
+            inv.return_value(GLib.Variant("(b)", (False,)))
+        elif method == "AboutToShowGroup":
+            inv.return_value(GLib.Variant("(aiai)", ([], [])))
+        else:
+            inv.return_value(None)
+
+    def _menu_get(self, conn, sender, path, iface, prop):
+        return {"Version": GLib.Variant("u", 3), "TextDirection": GLib.Variant("s", "ltr"),
+                "Status": GLib.Variant("s", "normal"), "IconThemePaths": GLib.Variant("as", [])}.get(prop)
+
+    def _clicked(self, item_id):
+        if item_id == ID_TOGGLE:
+            self.set_active(not self.active)
+        elif item_id == ID_QUIT:
+            GLib.idle_add(self.quit)
+
+
+def client(args):
+    """Send a command to the running tray app."""
+    cmd = args[0]
+    methods = {"--on": "On", "--off": "Off", "--toggle": "Toggle", "--quit": "Quit", "--status": "GetState"}
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    try:
+        if cmd == "--on" and len(args) == 3 and args[1] == "--for":
+            bus.call_sync(BUS_NAME, OBJ_PATH, BUS_NAME, "OnFor", GLib.Variant("(i)", (int(args[2]),)),
+                          None, Gio.DBusCallFlags.NONE, 3000, None)
+            return 0
+        result = bus.call_sync(BUS_NAME, OBJ_PATH, BUS_NAME, methods[cmd], None, None,
+                               Gio.DBusCallFlags.NONE, 3000, None)
+    except GLib.Error as err:
+        print("privacy-screen is not running (start it without arguments): %s" % err.message, file=sys.stderr)
+        return 1
+    if cmd == "--status":
+        print("on" if result.unpack()[0] else "off")
+    return 0
+
+
+def main():
+    args = sys.argv[1:]
+    if args:
+        if args[0] not in ("--on", "--off", "--toggle", "--status", "--quit"):
+            print(__doc__)
+            return 2
+        return client(args)
+
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        print("This is a Wayland session: the compositor does not allow gamma changes, "
+              "so the privacy screen cannot work. Log in to an X11 (Xorg) session.", file=sys.stderr)
+        return 2
+    if not os.environ.get("DISPLAY"):
+        print("DISPLAY is not set; run this from your desktop session.", file=sys.stderr)
+        return 2
+
+    loop = GLib.MainLoop()
+    helper = Helper(loop)
+
+    # Always restore the screen when the app ends
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, helper.quit)
+
+    helper.start(Gio.bus_get_sync(Gio.BusType.SESSION, None))
+    try:
+        loop.run()
+    finally:
+        if helper.active:
+            set_brightness(1)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
