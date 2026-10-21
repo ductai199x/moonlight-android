@@ -1,1 +1,2 @@
-tools/privacy-screen-linux/privacy-screen text eol=lf
+tools/** text eol=lf
+*.exe binary
